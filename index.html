@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ObservX — API Observability Dashboard</title>
+
+  <!-- Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+  <!-- Dashboard styles -->
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+  <div class="page-wrapper">
+
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <header>
+      <div class="header-left">
+        <div class="logo-mark">⬡</div>
+        <div>
+          <h1>Observ<span>X</span></h1>
+          <div class="header-subtitle">production · api volumetrics</div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="status-pill">
+          <span class="dot"></span>LIVE
+        </div>
+        <div class="last-updated" id="lastUpdated">—</div>
+        <button class="btn-refresh" id="refreshBtn" onclick="loadData()">⟳ REFRESH</button>
+      </div>
+    </header>
+
+    <!-- ── Dynamic content (summary cards, charts, table) ────── -->
+    <!-- Populated entirely by dashboard.js via renderDashboard() -->
+    <div id="mainContent">
+      <div class="state-overlay">
+        <div class="spinner"></div>
+        <div>Fetching metrics…</div>
+      </div>
+    </div>
+
+  </div><!-- /.page-wrapper -->
+
+  <!-- Dashboard logic — loaded last so DOM is ready -->
+  <script src="dashboard.js"></script>
+
+</body>
+</html>
