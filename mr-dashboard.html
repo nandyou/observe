@@ -4,19 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MergeWatch — Open Pull Requests</title>
-
-  <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+CSSEOF
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="mr-dashboard.css" />
+cat /mnt/user-data/outputs/mr-dashboard.css >> /mnt/user-data/outputs/mr-dashboard-standalone.html
+
+cat >> /mnt/user-data/outputs/mr-dashboard-standalone.html << 'HTMLEOF'
+  </style>
 </head>
 <body>
-
-  <!-- ── Page wrapper ─────────────────────────────────────── -->
   <div class="page-wrapper">
-
-    <!-- ── Header ─────────────────────────────────────────── -->
     <header>
       <div class="header-left">
         <div class="logo-mark">
@@ -30,9 +28,7 @@
           <div class="header-subtitle">open pull requests · staleness tracker</div>
         </div>
       </div>
-
       <div class="header-right">
-        <!-- Age filter -->
         <div class="filter-group">
           <label class="filter-label" for="ageFilter">OPEN SINCE ≥</label>
           <div class="filter-input-wrap">
@@ -40,38 +36,495 @@
             <span class="filter-unit">days</span>
           </div>
         </div>
-
-        <!-- Repo filter -->
         <div class="filter-group">
           <label class="filter-label" for="repoFilter">REPO</label>
           <select id="repoFilter" class="filter-select">
             <option value="">All repos</option>
           </select>
         </div>
-
         <div class="header-divider"></div>
-
         <div class="last-updated" id="lastUpdated">—</div>
         <button class="btn-refresh" id="refreshBtn" onclick="loadData()">⟳ REFRESH</button>
       </div>
     </header>
 
-    <!-- ── Summary strip ──────────────────────────────────── -->
-    <div class="summary-strip" id="summaryStrip">
-      <!-- populated by JS -->
-    </div>
+    <div class="summary-strip" id="summaryStrip"></div>
 
-    <!-- ── Table container ────────────────────────────────── -->
     <div class="table-panel" id="tablePanel">
       <div class="state-overlay">
         <div class="spinner"></div>
         <div>Loading pull requests…</div>
       </div>
     </div>
+  </div>
 
-  </div><!-- /.page-wrapper -->
+  <script>
+/* ============================================================
+   MergeWatch — JavaScript
+   mr-dashboard.js
 
-  <!-- Logic -->
-  <script src="mr-dashboard.js"></script>
+   Sections:
+     1. State & constants
+     2. Mock API          ← swap mockApiResponse() for real fetch
+     3. Utilities
+     4. Summary strip
+     5. Table render
+     6. Filters & search
+     7. Data loading
+     8. Init
+   ============================================================ */
+
+'use strict';
+
+/* ----------------------------------------------------------
+   1. STATE & CONSTANTS
+   ---------------------------------------------------------- */
+
+let allData     = [];          // full dataset from API
+let filtered    = [];          // after age + repo + search filters
+let currentSort = { col: 'age', dir: 'desc' };
+
+const AUTO_REFRESH_MS = 120_000;  // 2 min
+
+/** Label colour palette — cycles for unknown labels */
+const LABEL_PALETTE = [
+  { bg: 'rgba(0,229,255,0.1)',   border: 'rgba(0,229,255,0.3)',   color: '#00e5ff' },
+  { bg: 'rgba(124,58,237,0.1)',  border: 'rgba(124,58,237,0.35)', color: '#a78bfa' },
+  { bg: 'rgba(0,200,150,0.1)',   border: 'rgba(0,200,150,0.3)',   color: '#00c896' },
+  { bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.3)',  color: '#f59e0b' },
+  { bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.3)',   color: '#ef4444' },
+  { bg: 'rgba(249,115,22,0.1)',  border: 'rgba(249,115,22,0.3)',  color: '#fb923c' },
+  { bg: 'rgba(99,102,241,0.1)',  border: 'rgba(99,102,241,0.3)',  color: '#818cf8' },
+];
+
+/** Well-known label → fixed colour */
+const LABEL_COLOR_MAP = {
+  'bug':          { bg:'rgba(239,68,68,0.1)',   border:'rgba(239,68,68,0.3)',   color:'#ef4444' },
+  'feature':      { bg:'rgba(0,229,255,0.1)',   border:'rgba(0,229,255,0.3)',   color:'#00e5ff' },
+  'enhancement':  { bg:'rgba(0,200,150,0.1)',   border:'rgba(0,200,150,0.3)',   color:'#00c896' },
+  'hotfix':       { bg:'rgba(255,61,113,0.12)', border:'rgba(255,61,113,0.35)','color':'#ff3d71' },
+  'chore':        { bg:'rgba(100,116,139,0.1)', border:'rgba(100,116,139,0.3)', color:'#94a3b8' },
+  'refactor':     { bg:'rgba(124,58,237,0.1)',  border:'rgba(124,58,237,0.3)',  color:'#a78bfa' },
+  'docs':         { bg:'rgba(245,158,11,0.1)',  border:'rgba(245,158,11,0.3)',  color:'#f59e0b' },
+  'test':         { bg:'rgba(99,102,241,0.1)',  border:'rgba(99,102,241,0.3)',  color:'#818cf8' },
+  'wip':          { bg:'rgba(249,115,22,0.1)',  border:'rgba(249,115,22,0.3)',  color:'#fb923c' },
+  'review needed':{ bg:'rgba(0,229,255,0.1)',   border:'rgba(0,229,255,0.3)',   color:'#00e5ff' },
+  'blocked':      { bg:'rgba(239,68,68,0.15)',  border:'rgba(239,68,68,0.4)',   color:'#ef4444' },
+  'dependencies': { bg:'rgba(124,58,237,0.1)',  border:'rgba(124,58,237,0.3)',  color:'#a78bfa' },
+};
+
+const TABLE_COLUMNS = [
+  { key: 'repo',          label: 'REPOSITORY',     sortable: true  },
+  { key: 'requestor',     label: 'REQUESTOR',      sortable: true  },
+  { key: 'sourceBranch',  label: 'SOURCE → TARGET',sortable: true  },
+  { key: 'labels',        label: 'LABELS',         sortable: false },
+  { key: 'age',           label: 'AGE',            sortable: true  },
+];
+
+const SORT_KEY_MAP = {
+  repo:         'repo',
+  requestor:    'requestor',
+  sourceBranch: 'sourceBranch',
+  age:          'ageDays',
+};
+
+/* ----------------------------------------------------------
+   2. MOCK API
+   ──────────────────────────────────────────────────────────
+   Replace mockApiResponse() with a real fetch, e.g.:
+
+     const res  = await fetch('/api/pull-requests?state=open');
+     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+     return await res.json();
+
+   Expected response shape:
+   {
+     meta: { fetchedAt: ISO string, totalOpen: number }
+     pullRequests: [{
+       id:           string,
+       title:        string,
+       repo:         string,   // e.g. "platform-api"
+       org:          string,   // e.g. "acme-corp"
+       requestor:    string,   // display name
+       sourceBranch: string,
+       targetBranch: string,
+       labels:       string[],
+       openedAt:     ISO string,
+       ageDays:      number,
+       url:          string,   // link to the PR (optional)
+     }]
+   }
+   ---------------------------------------------------------- */
+function mockApiResponse() {
+  const repos = [
+    { repo: 'platform-api',     org: 'acme-corp'   },
+    { repo: 'web-frontend',     org: 'acme-corp'   },
+    { repo: 'auth-service',     org: 'acme-corp'   },
+    { repo: 'data-pipeline',    org: 'acme-corp'   },
+    { repo: 'mobile-app',       org: 'acme-corp'   },
+    { repo: 'infra-terraform',  org: 'acme-devops' },
+    { repo: 'design-system',    org: 'acme-corp'   },
+  ];
+
+  const requestors = [
+    'Alice Chen', 'Bob Martins', 'Carlos Ruiz', 'Dana Kim',
+    'Elena Vasquez', 'Frank Liu', 'Grace O\'Brien', 'Hiro Tanaka',
+  ];
+
+  const srcPrefixes = ['feature/', 'fix/', 'hotfix/', 'chore/', 'refactor/', 'docs/'];
+  const targets     = ['main', 'develop', 'staging', 'release/v2.1', 'release/v2.2'];
+
+  const labelPool = [
+    'bug', 'feature', 'enhancement', 'hotfix', 'chore',
+    'refactor', 'docs', 'test', 'wip', 'review needed',
+    'blocked', 'dependencies',
+  ];
+
+  const titles = [
+    'Add pagination to user list endpoint',
+    'Fix null pointer in payment processor',
+    'Upgrade React to v19',
+    'Implement dark mode toggle',
+    'Refactor auth middleware',
+    'Add unit tests for order service',
+    'Update Terraform EKS module',
+    'Fix CORS headers on /api/v1',
+    'Migrate from REST to GraphQL',
+    'Add Sentry error tracking',
+    'Improve CI pipeline caching',
+    'Remove deprecated jQuery usage',
+    'Add rate limiting to public endpoints',
+    'Fix flaky Cypress tests',
+    'Bump lodash to 4.17.21',
+    'Add accessibility attributes',
+    'Implement SSO with SAML 2.0',
+    'Cache user sessions in Redis',
+    'Fix mobile layout on iOS 17',
+    'Add OpenTelemetry tracing',
+  ];
+
+  const rnd    = (lo, hi) => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+  const pick   = arr => arr[rnd(0, arr.length - 1)];
+  const slug   = str => str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
+  const pullRequests = Array.from({ length: rnd(14, 22) }, (_, i) => {
+    const { repo, org } = pick(repos);
+    const requestor     = pick(requestors);
+    const ageDays       = rnd(0, 45);
+    const openedAt      = new Date(Date.now() - ageDays * 86_400_000).toISOString();
+    const numLabels     = rnd(0, 3);
+    const labels        = [...new Set(Array.from({ length: numLabels }, () => pick(labelPool)))];
+    const title         = pick(titles);
+    const src           = pick(srcPrefixes) + slug(title.split(' ').slice(0,3).join('-'));
+
+    return {
+      id:           `pr-${i + 1}`,
+      title,
+      repo,
+      org,
+      requestor,
+      sourceBranch: src,
+      targetBranch: pick(targets),
+      labels,
+      openedAt,
+      ageDays,
+      url:          `https://github.com/${org}/${repo}/pull/${rnd(100, 999)}`,
+    };
+  });
+
+  return {
+    meta: { fetchedAt: new Date().toISOString(), totalOpen: pullRequests.length },
+    pullRequests,
+  };
+}
+
+/* ----------------------------------------------------------
+   3. UTILITIES
+   ---------------------------------------------------------- */
+
+function ageCls(days) {
+  if (days <= 3)  return 'age-fresh';
+  if (days <= 7)  return 'age-moderate';
+  if (days <= 21) return 'age-stale';
+  return 'age-critical';
+}
+
+function ageLabel(days) {
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
+function labelStyle(name) {
+  const key = name.toLowerCase();
+  const found = LABEL_COLOR_MAP[key];
+  if (found) return found;
+  // hash the name to pick a consistent palette entry
+  let h = 0;
+  for (let c of key) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  return LABEL_PALETTE[h % LABEL_PALETTE.length];
+}
+
+function initials(name) {
+  return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
+}
+
+function avatarGradient(name) {
+  // deterministic gradient per name
+  const hues = [180, 260, 150, 200, 30, 0, 280, 320];
+  let h = 0;
+  for (let c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  const hue1 = hues[h % hues.length];
+  const hue2 = (hue1 + 50) % 360;
+  return `hsl(${hue1},80%,55%), hsl(${hue2},80%,65%)`;
+}
+
+/* ----------------------------------------------------------
+   4. SUMMARY STRIP
+   ---------------------------------------------------------- */
+function renderSummary(prs) {
+  const total      = prs.length;
+  const stale      = prs.filter(p => p.ageDays > 7).length;
+  const critical   = prs.filter(p => p.ageDays > 21).length;
+  const avgAge     = total ? (prs.reduce((a, p) => a + p.ageDays, 0) / total).toFixed(1) : 0;
+  const repos      = new Set(prs.map(p => p.repo)).size;
+
+  const cards = [
+    { label: 'OPEN PRS',        value: total,    sub: 'across all repos',      color: 'var(--accent)'  },
+    { label: 'STALE (> 7 days)',value: stale,    sub: `${total ? ((stale/total)*100).toFixed(0) : 0}% of open PRs`, color: 'var(--warn)'    },
+    { label: 'CRITICAL (> 21d)',value: critical, sub: 'need urgent review',    color: 'var(--critical)'},
+    { label: 'AVG AGE',         value: `${avgAge}d`, sub: 'mean open duration',color: 'var(--success)' },
+    { label: 'REPOS',           value: repos,    sub: 'with open PRs',         color: '#a78bfa'        },
+  ];
+
+  document.getElementById('summaryStrip').innerHTML = cards.map(c => `
+    <div class="stat-card" style="--card-color:${c.color}">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value">${c.value}</div>
+      <div class="stat-sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+/* ----------------------------------------------------------
+   5. TABLE RENDER
+   ---------------------------------------------------------- */
+
+// Exposed globally for inline onclick
+function sortTable(col) {
+  if (!SORT_KEY_MAP[col]) return;
+  currentSort = currentSort.col === col
+    ? { col, dir: currentSort.dir === 'asc' ? 'desc' : 'asc' }
+    : { col, dir: col === 'age' ? 'desc' : 'asc' };
+  renderTable(filtered);
+}
+
+function renderTable(prs) {
+  const panel = document.getElementById('tablePanel');
+
+  // toolbar
+  const toolbarHtml = `
+    <div class="table-toolbar">
+      <div class="toolbar-title">
+        Pull Requests
+        <span id="resultsCount">${prs.length} result${prs.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="toolbar-right">
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input type="text" id="searchInput" placeholder="Search repo, requestor, branch…"
+            oninput="onSearch(this.value)" />
+        </div>
+      </div>
+    </div>`;
+
+  if (prs.length === 0) {
+    panel.innerHTML = toolbarHtml + `
+      <div class="state-overlay">
+        <div class="empty-icon">⌀</div>
+        <div>No pull requests match your filters</div>
+      </div>`;
+    restoreSearch();
+    return;
+  }
+
+  // sort
+  const dir    = currentSort.dir === 'asc' ? 1 : -1;
+  const sortBy = SORT_KEY_MAP[currentSort.col] || 'ageDays';
+  const sorted = [...prs].sort((a, b) => {
+    const av = a[sortBy], bv = b[sortBy];
+    return (typeof av === 'string' ? av.localeCompare(bv) : av - bv) * dir;
+  });
+
+  // thead
+  const thead = TABLE_COLUMNS.map(c => {
+    if (!c.sortable) return `<th class="no-sort">${c.label}</th>`;
+    const cls = currentSort.col === c.key ? `sort-${currentSort.dir}` : '';
+    return `<th class="${cls}" onclick="sortTable('${c.key}')">${c.label}</th>`;
+  }).join('');
+
+  // tbody
+  const tbody = sorted.map((pr, i) => {
+    const cls      = ageCls(pr.ageDays);
+    const labelsHtml = pr.labels.length
+      ? pr.labels.map(l => {
+          const s = labelStyle(l);
+          return `<span class="label-tag" style="background:${s.bg};border-color:${s.border};color:${s.color}">${l}</span>`;
+        }).join('')
+      : `<span style="color:var(--muted);font-size:0.65rem;font-family:'JetBrains Mono',monospace">—</span>`;
+
+    const grad = avatarGradient(pr.requestor);
+
+    return `
+      <tr style="animation-delay:${i * 25}ms">
+        <td>
+          <div class="repo-cell">
+            <div class="repo-icon">${pr.repo.slice(0,2)}</div>
+            <div>
+              <div class="repo-name">${pr.repo}</div>
+              <div class="repo-org">${pr.org}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="requestor-cell">
+            <div class="avatar" style="background:linear-gradient(135deg,${grad})">${initials(pr.requestor)}</div>
+            <span class="requestor-name">${pr.requestor}</span>
+          </div>
+        </td>
+        <td>
+          <div class="branch-wrap">
+            <span class="branch-chip branch-src" title="${pr.sourceBranch}">${pr.sourceBranch}</span>
+            <span class="branch-arrow">→</span>
+            <span class="branch-chip branch-tgt" title="${pr.targetBranch}">${pr.targetBranch}</span>
+          </div>
+          <div class="pr-title" title="${pr.title}">${pr.title}</div>
+        </td>
+        <td>
+          <div class="labels-wrap">${labelsHtml}</div>
+        </td>
+        <td class="age-cell">
+          <span class="age-badge ${cls}">
+            <span class="age-dot"></span>
+            ${ageLabel(pr.ageDays)}
+          </span>
+        </td>
+      </tr>`;
+  }).join('');
+
+  panel.innerHTML = toolbarHtml + `
+    <div class="table-scroll">
+      <table>
+        <thead><tr>${thead}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`;
+
+  restoreSearch();
+}
+
+/* Restore search input value & cursor after re-render */
+function restoreSearch() {
+  const el = document.getElementById('searchInput');
+  if (el && searchQuery) {
+    el.value = searchQuery;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }
+}
+
+/* ----------------------------------------------------------
+   6. FILTERS & SEARCH
+   ---------------------------------------------------------- */
+let searchQuery = '';
+
+function applyFilters() {
+  const minAge = parseInt(document.getElementById('ageFilter').value, 10) || 0;
+  const repo   = document.getElementById('repoFilter').value;
+
+  filtered = allData.filter(pr => {
+    if (pr.ageDays < minAge) return false;
+    if (repo && pr.repo !== repo) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (
+        pr.repo.toLowerCase().includes(q)          ||
+        pr.requestor.toLowerCase().includes(q)     ||
+        pr.sourceBranch.toLowerCase().includes(q)  ||
+        pr.targetBranch.toLowerCase().includes(q)  ||
+        pr.title.toLowerCase().includes(q)         ||
+        pr.labels.some(l => l.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  });
+
+  renderSummary(filtered);
+  renderTable(filtered);
+}
+
+function onSearch(val) {
+  searchQuery = val;
+  applyFilters();
+}
+
+function populateRepoFilter(prs) {
+  const sel   = document.getElementById('repoFilter');
+  const repos = [...new Set(prs.map(p => p.repo))].sort();
+  const cur   = sel.value;
+  sel.innerHTML = `<option value="">All repos</option>` +
+    repos.map(r => `<option value="${r}"${r === cur ? ' selected' : ''}>${r}</option>`).join('');
+}
+
+/* ----------------------------------------------------------
+   7. DATA LOADING
+   ──────────────────────────────────────────────────────────
+   To connect a real API, replace the two mock lines with:
+
+     const res  = await fetch('/api/pull-requests?state=open');
+     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+     const json = await res.json();
+   ---------------------------------------------------------- */
+async function loadData() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+
+  try {
+    await new Promise(r => setTimeout(r, 650)); // simulate latency — remove for real API
+    const json = mockApiResponse();             // ← replace with real fetch()
+
+    allData = json.pullRequests;
+    populateRepoFilter(allData);
+    applyFilters();
+
+    const ts = new Date(json.meta.fetchedAt);
+    document.getElementById('lastUpdated').textContent =
+      'Updated ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  } catch (err) {
+    document.getElementById('tablePanel').innerHTML = `
+      <div class="state-overlay">
+        <div class="error-icon">⚠</div>
+        <div style="color:var(--danger)">Failed to load pull requests</div>
+        <div style="color:var(--muted);font-size:0.65rem">${err.message}</div>
+        <button class="retry-btn" onclick="loadData()">↺ Retry</button>
+      </div>`;
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+/* ----------------------------------------------------------
+   8. INIT
+   ---------------------------------------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+  // Wire up filter controls
+  document.getElementById('ageFilter').addEventListener('input',  applyFilters);
+  document.getElementById('repoFilter').addEventListener('change', applyFilters);
+
+  loadData();
+  setInterval(loadData, AUTO_REFRESH_MS);
+});
+  </script>
 </body>
 </html>
