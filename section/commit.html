@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CommitPulse — Developer Activity</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+/* ============================================================
+   CommitPulse — Styles
+   commits-dashboard.css
+   Shares design tokens with MergeWatch / ObservX family.
+   ============================================================ */
+
+/* ── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design Tokens (shared across dashboard family) ─────── */
+:root {
+–bg:       #060810;
+–surface:  #0d1117;
+–surface2: #111720;
+–border:   #1e2736;
+–accent:   #00e5ff;
+–accent2:  #7c3aed;
+–success:  #00c896;
+–warn:     #f59e0b;
+–danger:   #ef4444;
+–critical: #ff3d71;
+–text:     #e2e8f0;
+–muted:    #64748b;
+–glow:     0 0 20px rgba(0,229,255,0.15);
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+body {
+font-family: ‘DM Sans’, sans-serif;
+background: var(–bg);
+color: var(–text);
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+body::before {
+content: ‘’;
+position: fixed; inset: 0;
+background-image:
+linear-gradient(rgba(0,229,255,0.018) 1px, transparent 1px),
+linear-gradient(90deg, rgba(0,229,255,0.018) 1px, transparent 1px);
+background-size: 48px 48px;
+pointer-events: none; z-index: 0;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+.page-wrapper {
+position: relative; z-index: 1;
+max-width: 1500px; margin: 0 auto;
+padding: 0 28px 48px;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+header {
+display: flex; align-items: center; justify-content: space-between;
+padding: 22px 0 18px;
+border-bottom: 1px solid var(–border);
+margin-bottom: 22px;
+flex-wrap: wrap; gap: 14px;
+}
+
+.header-left { display: flex; align-items: center; gap: 14px; }
+
+.logo-mark {
+width: 38px; height: 38px;
+background: linear-gradient(135deg, var(–accent), var(–accent2));
+border-radius: 10px;
+display: flex; align-items: center; justify-content: center;
+color: #000; box-shadow: var(–glow); flex-shrink: 0;
+}
+
+h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+h1 span { color: var(–accent); }
+
+.header-subtitle {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.64rem; color: var(–muted); margin-top: 2px;
+}
+
+.header-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.header-divider { width: 1px; height: 28px; background: var(–border); flex-shrink: 0; }
+
+/* ── Filters (shared pattern) ───────────────────────────── */
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+
+.filter-label {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.58rem; letter-spacing: 0.1em;
+color: var(–muted); text-transform: uppercase;
+}
+
+.filter-select {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 6px;
+color: var(–text);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.72rem; padding: 5px 10px;
+outline: none; cursor: pointer; min-width: 140px;
+}
+.filter-select:focus { border-color: var(–accent); }
+
+/* ── Refresh / Timestamp ────────────────────────────────── */
+.last-updated {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.65rem; color: var(–muted); white-space: nowrap;
+}
+
+.btn-refresh {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.7rem; padding: 6px 14px; border-radius: 6px;
+border: 1px solid var(–accent); background: transparent; color: var(–accent);
+cursor: pointer; transition: all 0.2s; letter-spacing: 0.06em; white-space: nowrap;
+}
+.btn-refresh:hover    { background: rgba(0,229,255,0.08); box-shadow: var(–glow); }
+.btn-refresh.spinning { opacity: 0.45; pointer-events: none; }
+
+/* ── Period Strip ───────────────────────────────────────── */
+.period-strip {
+display: flex; gap: 8px;
+margin-bottom: 16px; flex-wrap: wrap;
+}
+
+.period-chip {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.65rem; font-weight: 600;
+padding: 4px 12px; border-radius: 100px;
+border: 1px solid var(–border);
+background: var(–surface); color: var(–muted);
+}
+.period-chip.current {
+border-color: var(–accent);
+background: rgba(0,229,255,0.07);
+color: var(–accent);
+}
+.period-chip.last    { border-color: rgba(124,58,237,0.4); color: #a78bfa; background: rgba(124,58,237,0.06); }
+.period-chip.history { border-color: rgba(100,116,139,0.3); color: var(–muted); }
+
+/* ── Summary Cards ──────────────────────────────────────── */
+.summary-strip {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+gap: 12px; margin-bottom: 20px;
+}
+
+.stat-card {
+background: var(–surface); border: 1px solid var(–border);
+border-radius: 10px; padding: 14px 18px;
+position: relative; overflow: hidden;
+transition: border-color 0.2s, transform 0.2s;
+}
+.stat-card:hover { border-color: var(–card-color, var(–accent)); transform: translateY(-1px); }
+.stat-card::before {
+content: ‘’; position: absolute;
+top: 0; left: 0; right: 0; height: 2px;
+background: var(–card-color, var(–accent));
+}
+.stat-label {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; letter-spacing: 0.1em;
+text-transform: uppercase; color: var(–muted); margin-bottom: 8px;
+}
+.stat-value {
+font-size: 1.75rem; font-weight: 700;
+letter-spacing: -0.03em; line-height: 1;
+color: var(–card-color, var(–accent));
+}
+.stat-sub  { font-size: 0.68rem; color: var(–muted); margin-top: 4px; }
+.stat-delta {
+display: inline-flex; align-items: center; gap: 3px;
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.62rem; font-weight: 600;
+margin-top: 5px; padding: 2px 6px;
+border-radius: 4px;
+}
+.delta-up   { background: rgba(0,200,150,0.1);  color: var(–success); }
+.delta-down { background: rgba(239,68,68,0.1);  color: var(–danger);  }
+.delta-flat { background: rgba(100,116,139,0.1); color: var(–muted);  }
+
+/* ── Charts Row ─────────────────────────────────────────── */
+.charts-row {
+display: grid;
+grid-template-columns: 2fr 1fr;
+gap: 16px; margin-bottom: 20px;
+}
+@media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+
+/* ── Shared Panel ───────────────────────────────────────── */
+.panel {
+background: var(–surface); border: 1px solid var(–border);
+border-radius: 14px; padding: 20px;
+}
+
+.panel-header {
+display: flex; align-items: center; justify-content: space-between;
+margin-bottom: 16px;
+}
+
+.panel-title {
+font-size: 0.82rem; font-weight: 600; color: var(–text);
+}
+.panel-sub {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.68rem; color: var(–muted); font-weight: 400; margin-left: 8px;
+}
+.panel-badge {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; padding: 3px 8px; border-radius: 4px;
+background: rgba(0,229,255,0.08); color: var(–accent);
+border: 1px solid rgba(0,229,255,0.2);
+}
+
+/* ── Chart ──────────────────────────────────────────────── */
+.chart-wrap { position: relative; height: 220px; }
+
+.chart-legend {
+display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px;
+}
+.legend-item {
+display: flex; align-items: center; gap: 6px;
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.63rem; color: var(–muted);
+}
+.legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+/* ── Leaderboard ────────────────────────────────────────── */
+.leaderboard-panel { display: flex; flex-direction: column; }
+
+.lb-row {
+display: flex; align-items: center; gap: 12px;
+padding: 9px 0;
+border-bottom: 1px solid rgba(30,39,54,0.5);
+animation: rowIn 0.3s ease both;
+}
+.lb-row:last-child { border-bottom: none; }
+
+.lb-rank {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.65rem; font-weight: 700;
+width: 22px; text-align: right; flex-shrink: 0;
+}
+.lb-rank.gold   { color: #fbbf24; }
+.lb-rank.silver { color: #94a3b8; }
+.lb-rank.bronze { color: #b45309; }
+.lb-rank.other  { color: var(–muted); }
+
+.lb-avatar {
+width: 28px; height: 28px; border-radius: 50%;
+display: flex; align-items: center; justify-content: center;
+font-size: 0.62rem; font-weight: 700; color: #fff;
+flex-shrink: 0;
+}
+
+.lb-name { font-size: 0.8rem; color: var(–text); flex: 1; min-width: 0; }
+.lb-team {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; color: var(–muted); margin-top: 1px;
+}
+
+.lb-bar-wrap { flex: 1; min-width: 60px; }
+.lb-bar-track {
+height: 4px; background: var(–border);
+border-radius: 2px; overflow: hidden;
+}
+.lb-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+.lb-count {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.7rem; font-weight: 600;
+color: var(–accent); text-align: right;
+width: 36px; flex-shrink: 0;
+}
+
+/* ── Table Panel ────────────────────────────────────────── */
+.table-panel {
+background: var(–surface); border: 1px solid var(–border);
+border-radius: 14px; overflow: hidden;
+}
+
+.table-toolbar {
+display: flex; align-items: center; justify-content: space-between;
+padding: 14px 18px;
+border-bottom: 1px solid var(–border);
+flex-wrap: wrap; gap: 10px;
+}
+
+.toolbar-title { font-size: 0.82rem; font-weight: 600; color: var(–text); }
+.toolbar-title span {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.7rem; color: var(–muted); font-weight: 400; margin-left: 8px;
+}
+
+.toolbar-right { display: flex; align-items: center; gap: 10px; }
+
+.search-wrap {
+display: flex; align-items: center; gap: 8px;
+background: var(–surface2); border: 1px solid var(–border);
+border-radius: 6px; padding: 5px 10px;
+}
+.search-wrap input {
+background: transparent; border: none; outline: none;
+color: var(–text);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.72rem; width: 180px;
+}
+.search-wrap input::placeholder { color: var(–muted); }
+.search-icon { color: var(–muted); font-size: 0.78rem; }
+
+/* ── Table ──────────────────────────────────────────────── */
+.table-scroll { overflow-x: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+thead tr { border-bottom: 1px solid var(–border); }
+
+th {
+text-align: left; padding: 11px 16px;
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; letter-spacing: 0.1em;
+text-transform: uppercase; color: var(–muted);
+font-weight: 600; white-space: nowrap;
+cursor: pointer; user-select: none; transition: color 0.15s;
+}
+th:hover            { color: var(–accent); }
+th.sort-asc::after  { content: ’ ↑’; color: var(–accent); }
+th.sort-desc::after { content: ’ ↓’; color: var(–accent); }
+th.no-sort          { cursor: default; }
+th.no-sort:hover    { color: var(–muted); }
+
+tbody tr {
+border-bottom: 1px solid rgba(30,39,54,0.55);
+transition: background 0.12s;
+animation: rowIn 0.3s ease both;
+}
+tbody tr:hover      { background: rgba(0,229,255,0.025); }
+tbody tr:last-child { border-bottom: none; }
+
+td { padding: 12px 16px; vertical-align: middle; }
+
+/* ── Developer Cell ─────────────────────────────────────── */
+.dev-cell { display: flex; align-items: center; gap: 10px; }
+.avatar {
+width: 32px; height: 32px; border-radius: 50%;
+display: flex; align-items: center; justify-content: center;
+font-size: 0.65rem; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.dev-name  { font-weight: 600; font-size: 0.82rem; color: var(–text); }
+.dev-handle {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.62rem; color: var(–muted); margin-top: 1px;
+}
+
+/* ── Team Badge ─────────────────────────────────────────── */
+.team-badge {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; padding: 3px 8px;
+border-radius: 100px; white-space: nowrap;
+border: 1px solid; font-weight: 600;
+}
+
+/* ── Commit Count Cell ──────────────────────────────────── */
+.commits-cell { text-align: right; }
+.commit-num {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.82rem; font-weight: 700;
+}
+.commit-num.this-month { color: var(–accent); }
+.commit-num.last-month { color: #a78bfa; }
+.commit-num.six-months { color: var(–success); }
+
+/* ── Mini spark bar per cell ────────────────────────────── */
+.mini-bar-wrap { display: flex; align-items: flex-end; gap: 2px; height: 20px; margin-top: 4px; justify-content: flex-end; }
+.mini-bar {
+width: 6px; border-radius: 2px 2px 0 0;
+background: var(–accent); opacity: 0.4;
+transition: opacity 0.2s;
+}
+.mini-bar.peak { opacity: 1; }
+
+/* ── Delta pill ─────────────────────────────────────────── */
+.delta-pill {
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.6rem; font-weight: 700;
+padding: 2px 6px; border-radius: 4px;
+display: inline-block; margin-top: 3px;
+}
+.delta-pill.up   { background: rgba(0,200,150,0.1);  color: var(–success); }
+.delta-pill.down { background: rgba(239,68,68,0.1);  color: var(–danger);  }
+.delta-pill.flat { background: rgba(100,116,139,0.1); color: var(–muted);  }
+
+/* ── Heatmap-style activity bar ─────────────────────────── */
+.activity-bar {
+display: flex; gap: 2px; align-items: center;
+}
+.activity-seg {
+height: 8px; border-radius: 2px; flex: 1;
+transition: opacity 0.2s;
+}
+
+/* ── Loading / Error / Empty ────────────────────────────── */
+.state-overlay {
+display: flex; flex-direction: column;
+align-items: center; justify-content: center;
+min-height: 300px; gap: 12px;
+color: var(–muted);
+font-family: ‘JetBrains Mono’, monospace; font-size: 0.76rem;
+}
+.spinner {
+width: 26px; height: 26px;
+border: 2px solid var(–border); border-top-color: var(–accent);
+border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+.empty-icon { font-size: 2rem; opacity: 0.35; }
+.error-icon { font-size: 2rem; }
+.retry-btn {
+margin-top: 8px;
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.7rem; padding: 6px 16px; border-radius: 6px;
+border: 1px solid var(–danger); background: transparent;
+color: var(–danger); cursor: pointer;
+}
+.retry-btn:hover { background: rgba(239,68,68,0.08); }
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes spin  { to { transform: rotate(360deg); } }
+@keyframes rowIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+.page-wrapper { padding: 0 14px 32px; }
+h1            { font-size: 1rem; }
+.stat-value   { font-size: 1.4rem; }
+td, th        { padding: 9px 10px; }
+}
+</style>
+
+</head>
+<body>
+  <div class="page-wrapper">
+
+```
+<header>
+  <div class="header-left">
+    <div class="logo-mark">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <line x1="12" y1="2"  x2="12" y2="6"/>
+        <line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="4.93" y1="4.93"   x2="7.76" y2="7.76"/>
+        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+        <line x1="2"  y1="12" x2="6"  y2="12"/>
+        <line x1="18" y1="12" x2="22" y2="12"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Commit<span>Pulse</span></h1>
+      <div class="header-subtitle">developer commit activity · monthly breakdown</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="filter-group">
+      <label class="filter-label" for="teamFilter">TEAM</label>
+      <select id="teamFilter" class="filter-select"><option value="">All teams</option></select>
+    </div>
+    <div class="filter-group">
+      <label class="filter-label" for="repoFilter">REPO</label>
+      <select id="repoFilter" class="filter-select"><option value="">All repos</option></select>
+    </div>
+    <div class="header-divider"></div>
+    <div class="last-updated" id="lastUpdated">—</div>
+    <button class="btn-refresh" id="refreshBtn" onclick="loadData()">⟳ REFRESH</button>
+  </div>
+</header>
+
+<div class="period-strip" id="periodStrip"></div>
+<div class="summary-strip" id="summaryStrip"></div>
+
+<div class="charts-row">
+  <div class="panel chart-panel">
+    <div class="panel-header">
+      <div class="panel-title">Team Commit Trend <span class="panel-sub">last 6 months</span></div>
+      <div class="panel-badge">monthly</div>
+    </div>
+    <div class="chart-wrap"><canvas id="trendCanvas"></canvas></div>
+    <div class="chart-legend" id="chartLegend"></div>
+  </div>
+  <div class="panel leaderboard-panel">
+    <div class="panel-header">
+      <div class="panel-title">Top Contributors <span class="panel-sub">this month</span></div>
+    </div>
+    <div id="leaderboard"></div>
+  </div>
+</div>
+
+<div class="table-panel" id="tablePanel">
+  <div class="state-overlay">
+    <div class="spinner"></div>
+    <div>Loading commit data…</div>
+  </div>
+</div>
+```
+
+  </div>
+  <script>
+/* ============================================================
+   CommitPulse — JavaScript
+   commits-dashboard.js
+
+Sections:
+1. State & constants
+2. Mock API          ← swap for real fetch()
+3. Utilities
+4. Period strip
+5. Summary cards
+6. Trend chart
+7. Leaderboard
+8. Table render
+9. Filters & search
+10. Data loading
+11. Init
+============================================================ */
+
+‘use strict’;
+
+/* –––––––––––––––––––––––––––––
+
+1. STATE & CONSTANTS
+   ––––––––––––––––––––––––––––– */
+   let allDevs     = [];
+   let filtered    = [];
+   let searchQuery = ‘’;
+   let trendChart  = null;
+   let currentSort = { col: ‘thisMonth’, dir: ‘desc’ };
+
+const AUTO_REFRESH_MS = 120_000;
+
+const TEAM_COLORS = {
+‘Backend’:   { bg: ‘rgba(0,229,255,0.08)’,   border: ‘rgba(0,229,255,0.3)’,   color: ‘#00e5ff’ },
+‘Frontend’:  { bg: ‘rgba(124,58,237,0.08)’,  border: ‘rgba(124,58,237,0.35)’, color: ‘#a78bfa’ },
+‘DevOps’:    { bg: ‘rgba(0,200,150,0.08)’,   border: ‘rgba(0,200,150,0.3)’,   color: ‘#00c896’ },
+‘Mobile’:    { bg: ‘rgba(245,158,11,0.08)’,  border: ‘rgba(245,158,11,0.3)’,  color: ‘#f59e0b’ },
+‘Data’:      { bg: ‘rgba(249,115,22,0.08)’,  border: ‘rgba(249,115,22,0.3)’,  color: ‘#fb923c’ },
+‘QA’:        { bg: ‘rgba(99,102,241,0.08)’,  border: ‘rgba(99,102,241,0.3)’,  color: ‘#818cf8’ },
+‘Security’:  { bg: ‘rgba(255,61,113,0.08)’,  border: ‘rgba(255,61,113,0.3)’,  color: ‘#ff3d71’ },
+};
+
+const CHART_PALETTE = [
+‘#00e5ff’,’#a78bfa’,’#00c896’,’#f59e0b’,’#fb923c’,’#818cf8’,’#ff3d71’,
+];
+
+const TABLE_COLUMNS = [
+{ key: ‘developer’, label: ‘DEVELOPER’,       sortable: false },
+{ key: ‘team’,      label: ‘TEAM’,            sortable: true  },
+{ key: ‘thisMonth’, label: ‘THIS MONTH’,      sortable: true  },
+{ key: ‘lastMonth’, label: ‘LAST MONTH’,      sortable: true  },
+{ key: ‘sixMonths’, label: ‘LAST 6 MONTHS’,   sortable: true  },
+{ key: ‘trend’,     label: ‘MOM CHANGE’,      sortable: true  },
+{ key: ‘activity’,  label: ‘6M ACTIVITY’,     sortable: false },
+];
+
+/* –––––––––––––––––––––––––––––
+2. MOCK API
+──────────────────────────────────────────────────────────
+Replace mockApiResponse() body with a real fetch, e.g.:
+
+```
+ const res  = await fetch('/api/commits/summary');
+ if (!res.ok) throw new Error(`HTTP ${res.status}`);
+ return await res.json();
+```
+
+Expected response shape:
+{
+meta: {
+fetchedAt:   ISO string,
+thisMonth:   “January 2026”,
+lastMonth:   “December 2025”,
+months:      string[6]  // labels oldest→newest
+},
+developers: [{
+id:          string,
+name:        string,
+handle:      string,      // e.g. “@alice”
+team:        string,
+thisMonth:   number,      // commit count
+lastMonth:   number,
+sixMonths:   number,      // total over 6 months
+monthlyBreakdown: number[6]  // oldest→newest (includes thisMonth at index 5)
+}]
+}
+––––––––––––––––––––––––––––– */
+function mockApiResponse() {
+const now       = new Date();
+const months    = [];
+const labels    = [];
+for (let i = 5; i >= 0; i–) {
+const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+months.push(d);
+labels.push(d.toLocaleString(‘default’, { month: ‘short’, year: ‘2-digit’ }));
+}
+
+const devDefs = [
+{ name: ‘Alice Chen’,      handle: ‘@alice.chen’,   team: ‘Backend’  },
+{ name: ‘Bob Martins’,     handle: ‘@bob.m’,        team: ‘Frontend’ },
+{ name: ‘Carlos Ruiz’,     handle: ‘@c.ruiz’,       team: ‘Backend’  },
+{ name: ‘Dana Kim’,        handle: ‘@dana.k’,       team: ‘Mobile’   },
+{ name: ‘Elena Vasquez’,   handle: ‘@elenav’,       team: ‘DevOps’   },
+{ name: ‘Frank Liu’,       handle: ‘@frank.liu’,    team: ‘Data’     },
+{ name: ‘Grace O'Brien’,  handle: ‘@grace.ob’,     team: ‘Frontend’ },
+{ name: ‘Hiro Tanaka’,     handle: ‘@h.tanaka’,     team: ‘Backend’  },
+{ name: ‘Isabel Santos’,   handle: ‘@isa.s’,        team: ‘QA’       },
+{ name: ‘Jake Park’,       handle: ‘@jake.p’,       team: ‘Security’ },
+{ name: ‘Kavya Nair’,      handle: ‘@kavya.n’,      team: ‘Data’     },
+{ name: ‘Liam O'Connor’,  handle: ‘@liam.oc’,      team: ‘DevOps’   },
+{ name: ‘Maya Patel’,      handle: ‘@maya.p’,       team: ‘Frontend’ },
+{ name: ‘Noah Schmidt’,    handle: ‘@n.schmidt’,    team: ‘Mobile’   },
+];
+
+const rnd = (lo, hi) => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+
+const developers = devDefs.map((d, i) => {
+// each dev has a “base pace” with some random variability per month
+const base              = rnd(12, 80);
+const monthlyBreakdown  = Array.from({ length: 6 }, () => Math.max(0, base + rnd(-15, 20)));
+const thisMonth         = monthlyBreakdown[5];
+const lastMonth         = monthlyBreakdown[4];
+const sixMonths         = monthlyBreakdown.reduce((a, b) => a + b, 0);
+
+```
+return {
+  id: `dev-${i}`,
+  name:    d.name,
+  handle:  d.handle,
+  team:    d.team,
+  thisMonth,
+  lastMonth,
+  sixMonths,
+  monthlyBreakdown,
+};
+```
+
+});
+
+const fmtMonth = d => d.toLocaleString(‘default’, { month: ‘long’, year: ‘numeric’ });
+
+return {
+meta: {
+fetchedAt:  new Date().toISOString(),
+thisMonth:  fmtMonth(months[5]),
+lastMonth:  fmtMonth(months[4]),
+months:     labels,
+},
+developers,
+};
+}
+
+/* –––––––––––––––––––––––––––––
+3. UTILITIES
+––––––––––––––––––––––––––––– */
+function initials(name) {
+return name.split(’ ‘).map(p => p[0]).slice(0, 2).join(’’).toUpperCase();
+}
+
+function avatarGradient(name) {
+const hues = [180, 260, 150, 200, 30, 0, 280, 320, 210, 60];
+let h = 0;
+for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+const h1 = hues[h % hues.length];
+const h2 = (h1 + 55) % 360;
+return `hsl(${h1},75%,52%), hsl(${h2},80%,62%)`;
+}
+
+function deltaText(current, prev) {
+if (prev === 0) return { text: ‘—’, cls: ‘flat’ };
+const pct = Math.round(((current - prev) / prev) * 100);
+if (pct > 0)  return { text: `▲ ${pct}%`, cls: ‘up’ };
+if (pct < 0)  return { text: `▼ ${Math.abs(pct)}%`, cls: ‘down’ };
+return { text: ‘─ 0%’, cls: ‘flat’ };
+}
+
+function teamStyle(team) {
+return TEAM_COLORS[team] || { bg: ‘rgba(100,116,139,0.1)’, border: ‘rgba(100,116,139,0.3)’, color: ‘#94a3b8’ };
+}
+
+/* –––––––––––––––––––––––––––––
+4. PERIOD STRIP
+––––––––––––––––––––––––––––– */
+function renderPeriodStrip(meta) {
+document.getElementById(‘periodStrip’).innerHTML = `<span class="period-chip current">● ${meta.thisMonth} (current)</span> <span class="period-chip last">◐ ${meta.lastMonth} (last)</span> <span class="period-chip history">○ Last 6 months combined</span>`;
+}
+
+/* –––––––––––––––––––––––––––––
+5. SUMMARY CARDS
+––––––––––––––––––––––––––––– */
+function renderSummary(devs, meta) {
+const totalThis = devs.reduce((a, d) => a + d.thisMonth, 0);
+const totalLast = devs.reduce((a, d) => a + d.lastMonth, 0);
+const total6m   = devs.reduce((a, d) => a + d.sixMonths, 0);
+const avgThis   = devs.length ? (totalThis / devs.length).toFixed(1) : 0;
+const top       = […devs].sort((a, b) => b.thisMonth - a.thisMonth)[0];
+const delta     = deltaText(totalThis, totalLast);
+
+const cards = [
+{
+label: ‘COMMITS THIS MONTH’, value: totalThis.toLocaleString(),
+sub: meta.thisMonth,
+extra: `<span class="stat-delta delta-${delta.cls}">${delta.text} vs last month</span>`,
+color: ‘var(–accent)’,
+},
+{
+label: ‘COMMITS LAST MONTH’, value: totalLast.toLocaleString(),
+sub: meta.lastMonth, extra: ‘’, color: ‘#a78bfa’,
+},
+{
+label: ‘TOTAL LAST 6M’, value: total6m.toLocaleString(),
+sub: ‘across all developers’, extra: ‘’, color: ‘var(–success)’,
+},
+{
+label: ‘AVG THIS MONTH’, value: avgThis,
+sub: ‘per developer’, extra: ‘’, color: ‘var(–warn)’,
+},
+{
+label: ‘TOP CONTRIBUTOR’, value: top ? top.thisMonth : ‘—’,
+sub: top ? top.name : ‘—’, extra: ‘’, color: ‘var(–critical)’,
+},
+{
+label: ‘ACTIVE DEVS’, value: devs.filter(d => d.thisMonth > 0).length,
+sub: `of ${devs.length} total`, extra: ‘’, color: ‘#818cf8’,
+},
+];
+
+document.getElementById(‘summaryStrip’).innerHTML = cards.map(c => ` <div class="stat-card" style="--card-color:${c.color}"> <div class="stat-label">${c.label}</div> <div class="stat-value">${c.value}</div> <div class="stat-sub">${c.sub}</div> ${c.extra} </div>`).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+6. TREND CHART
+––––––––––––––––––––––––––––– */
+function renderTrendChart(devs, meta) {
+if (trendChart) trendChart.destroy();
+const ctx = document.getElementById(‘trendCanvas’).getContext(‘2d’);
+
+// Aggregate by team per month
+const teams    = […new Set(devs.map(d => d.team))].sort();
+const datasets = teams.map((team, ti) => {
+const color   = (TEAM_COLORS[team] || {}).color || CHART_PALETTE[ti % CHART_PALETTE.length];
+const data    = meta.months.map((_, mi) =>
+devs.filter(d => d.team === team).reduce((s, d) => s + d.monthlyBreakdown[mi], 0)
+);
+return {
+label:           team,
+data,
+borderColor:     color,
+backgroundColor: color + ‘18’,
+fill:            false,
+tension:         0.4,
+pointRadius:     4,
+pointHoverRadius:6,
+borderWidth:     2,
+};
+});
+
+// Legend
+document.getElementById(‘chartLegend’).innerHTML = teams.map((team, ti) => {
+const color = (TEAM_COLORS[team] || {}).color || CHART_PALETTE[ti % CHART_PALETTE.length];
+return `<div class="legend-item"> <div class="legend-dot" style="background:${color}"></div>${team} </div>`;
+}).join(’’);
+
+trendChart = new Chart(ctx, {
+type: ‘line’,
+data: { labels: meta.months, datasets },
+options: {
+responsive: true, maintainAspectRatio: false,
+animation: { duration: 700 },
+interaction: { mode: ‘index’, intersect: false },
+plugins: {
+legend: { display: false },
+tooltip: {
+backgroundColor: ‘#0d1117’, borderColor: ‘#1e2736’, borderWidth: 1,
+titleColor: ‘#e2e8f0’, bodyColor: ‘#94a3b8’,
+titleFont: { family: ‘JetBrains Mono’, size: 11 },
+bodyFont:  { family: ‘JetBrains Mono’, size: 11 },
+padding: 12,
+},
+},
+scales: {
+x: {
+grid:   { color: ‘rgba(30,39,54,0.8)’, drawTicks: false },
+ticks:  { color: ‘#475569’, font: { family: ‘JetBrains Mono’, size: 10 } },
+border: { color: ‘#1e2736’ },
+},
+y: {
+grid:   { color: ‘rgba(30,39,54,0.8)’, drawTicks: false },
+ticks:  { color: ‘#475569’, font: { family: ‘JetBrains Mono’, size: 10 } },
+border: { color: ‘#1e2736’ },
+beginAtZero: true,
+},
+},
+},
+});
+}
+
+/* –––––––––––––––––––––––––––––
+7. LEADERBOARD (top 7 by this-month commits)
+––––––––––––––––––––––––––––– */
+function renderLeaderboard(devs) {
+const top    = […devs].sort((a, b) => b.thisMonth - a.thisMonth).slice(0, 7);
+const maxCnt = top[0]?.thisMonth || 1;
+const rankCls = i => [‘gold’,‘silver’,‘bronze’][i] || ‘other’;
+const rankStr = i => [‘🥇’,‘🥈’,‘🥉’][i] || `#${i+1}`;
+
+document.getElementById(‘leaderboard’).innerHTML = top.map((d, i) => {
+const grad  = avatarGradient(d.name);
+const tStyle = teamStyle(d.team);
+const pct   = ((d.thisMonth / maxCnt) * 100).toFixed(1);
+return ` <div class="lb-row" style="animation-delay:${i*40}ms"> <div class="lb-rank ${rankCls(i)}">${rankStr(i)}</div> <div class="lb-avatar" style="background:linear-gradient(135deg,${grad})">${initials(d.name)}</div> <div style="flex:1;min-width:0"> <div class="lb-name">${d.name}</div> <div class="lb-team">${d.team}</div> </div> <div class="lb-bar-wrap"> <div class="lb-bar-track"> <div class="lb-bar-fill" style="width:${pct}%;background:${tStyle.color}"></div> </div> </div> <div class="lb-count">${d.thisMonth}</div> </div>`;
+}).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+8. TABLE RENDER
+––––––––––––––––––––––––––––– */
+function sortTable(col) {
+currentSort = currentSort.col === col
+? { col, dir: currentSort.dir === ‘asc’ ? ‘desc’ : ‘asc’ }
+: { col, dir: ‘desc’ };
+renderTable(filtered);
+}
+
+function renderTable(devs) {
+const panel = document.getElementById(‘tablePanel’);
+
+const toolbarHtml = ` <div class="table-toolbar"> <div class="toolbar-title"> Developer Breakdown <span>${devs.length} developer${devs.length !== 1 ? 's' : ''}</span> </div> <div class="toolbar-right"> <div class="search-wrap"> <span class="search-icon">⌕</span> <input type="text" id="searchInput" placeholder="Search name, handle, team…" oninput="onSearch(this.value)" /> </div> </div> </div>`;
+
+if (devs.length === 0) {
+panel.innerHTML = toolbarHtml + ` <div class="state-overlay"> <div class="empty-icon">⌀</div> <div>No developers match your filters</div> </div>`;
+restoreSearch();
+return;
+}
+
+// Sort
+const dir = currentSort.dir === ‘asc’ ? 1 : -1;
+const keyMap = { team: ‘team’, thisMonth: ‘thisMonth’, lastMonth: ‘lastMonth’, sixMonths: ‘sixMonths’, trend: ‘thisMonth’ };
+const sortKey = keyMap[currentSort.col] || ‘thisMonth’;
+const sorted  = […devs].sort((a, b) => {
+const av = a[sortKey], bv = b[sortKey];
+return (typeof av === ‘string’ ? av.localeCompare(bv) : av - bv) * dir;
+});
+
+const maxThis = Math.max(…sorted.map(d => d.thisMonth), 1);
+
+// thead
+const thead = TABLE_COLUMNS.map(c => {
+if (!c.sortable) return `<th class="no-sort">${c.label}</th>`;
+const cls = currentSort.col === c.key ? `sort-${currentSort.dir}` : ‘’;
+return `<th class="${cls}" onclick="sortTable('${c.key}')">${c.label}</th>`;
+}).join(’’);
+
+// tbody
+const tbody = sorted.map((d, i) => {
+const grad   = avatarGradient(d.name);
+const tStyle = teamStyle(d.team);
+const delta  = deltaText(d.thisMonth, d.lastMonth);
+
+```
+// mini spark bars (6 months)
+const maxBar = Math.max(...d.monthlyBreakdown, 1);
+const sparkBars = d.monthlyBreakdown.map((v, mi) => {
+  const h   = Math.max(2, Math.round((v / maxBar) * 20));
+  const isPeak = v === Math.max(...d.monthlyBreakdown);
+  return `<div class="mini-bar${isPeak ? ' peak' : ''}" style="height:${h}px;background:${tStyle.color}"></div>`;
+}).join('');
+
+// 6-month activity heatmap segments
+const maxSeg = Math.max(...d.monthlyBreakdown, 1);
+const segments = d.monthlyBreakdown.map(v => {
+  const intensity = Math.max(0.08, v / maxSeg);
+  return `<div class="activity-seg" style="background:${tStyle.color};opacity:${intensity.toFixed(2)}"></div>`;
+}).join('');
+
+return `
+  <tr style="animation-delay:${i * 25}ms">
+    <td>
+      <div class="dev-cell">
+        <div class="avatar" style="background:linear-gradient(135deg,${grad})">${initials(d.name)}</div>
+        <div>
+          <div class="dev-name">${d.name}</div>
+          <div class="dev-handle">${d.handle}</div>
+        </div>
+      </div>
+    </td>
+    <td>
+      <span class="team-badge" style="background:${tStyle.bg};border-color:${tStyle.border};color:${tStyle.color}">
+        ${d.team}
+      </span>
+    </td>
+    <td class="commits-cell">
+      <div class="commit-num this-month">${d.thisMonth}</div>
+      <div class="mini-bar-wrap">${sparkBars}</div>
+    </td>
+    <td class="commits-cell">
+      <div class="commit-num last-month">${d.lastMonth}</div>
+    </td>
+    <td class="commits-cell">
+      <div class="commit-num six-months">${d.sixMonths}</div>
+    </td>
+    <td>
+      <span class="delta-pill ${delta.cls}">${delta.text}</span>
+    </td>
+    <td>
+      <div class="activity-bar">${segments}</div>
+    </td>
+  </tr>`;
+```
+
+}).join(’’);
+
+panel.innerHTML = toolbarHtml + ` <div class="table-scroll"> <table> <thead><tr>${thead}</tr></thead> <tbody>${tbody}</tbody> </table> </div>`;
+
+restoreSearch();
+}
+
+function restoreSearch() {
+const el = document.getElementById(‘searchInput’);
+if (el && searchQuery) {
+el.value = searchQuery;
+el.focus();
+const len = el.value.length;
+el.setSelectionRange(len, len);
+}
+}
+
+/* –––––––––––––––––––––––––––––
+9. FILTERS & SEARCH
+––––––––––––––––––––––––––––– */
+function applyFilters() {
+const team = document.getElementById(‘teamFilter’).value;
+const repo = document.getElementById(‘repoFilter’).value; // future use
+
+filtered = allDevs.filter(d => {
+if (team && d.team !== team) return false;
+if (searchQuery) {
+const q = searchQuery.toLowerCase();
+return (
+d.name.toLowerCase().includes(q)   ||
+d.handle.toLowerCase().includes(q) ||
+d.team.toLowerCase().includes(q)
+);
+}
+return true;
+});
+
+renderLeaderboard(filtered);
+renderTable(filtered);
+}
+
+function onSearch(val) {
+searchQuery = val;
+applyFilters();
+}
+
+function populateFilters(devs) {
+const teams  = […new Set(devs.map(d => d.team))].sort();
+const tSel   = document.getElementById(‘teamFilter’);
+const curT   = tSel.value;
+tSel.innerHTML = `<option value="">All teams</option>` +
+teams.map(t => `<option value="${t}"${t === curT ? ' selected' : ''}>${t}</option>`).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+10. DATA LOADING
+──────────────────────────────────────────────────────────
+To connect a real API, replace the two mock lines with:
+
+```
+ const res  = await fetch('/api/commits/summary');
+ if (!res.ok) throw new Error(`HTTP ${res.status}`);
+ const json = await res.json();
+```
+
+––––––––––––––––––––––––––––– */
+async function loadData() {
+const btn = document.getElementById(‘refreshBtn’);
+btn.classList.add(‘spinning’);
+
+try {
+await new Promise(r => setTimeout(r, 650)); // simulate latency — remove for real API
+const json = mockApiResponse();              // ← replace with real fetch()
+
+```
+allDevs = json.developers;
+populateFilters(allDevs);
+renderPeriodStrip(json.meta);
+renderSummary(allDevs, json.meta);
+renderTrendChart(allDevs, json.meta);
+applyFilters();
+
+const ts = new Date(json.meta.fetchedAt);
+document.getElementById('lastUpdated').textContent =
+  'Updated ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+```
+
+} catch (err) {
+document.getElementById(‘tablePanel’).innerHTML = ` <div class="state-overlay"> <div class="error-icon">⚠</div> <div style="color:var(--danger)">Failed to load commit data</div> <div style="color:var(--muted);font-size:0.65rem">${err.message}</div> <button class="retry-btn" onclick="loadData()">↺ Retry</button> </div>`;
+} finally {
+btn.classList.remove(‘spinning’);
+}
+}
+
+/* –––––––––––––––––––––––––––––
+11. INIT
+––––––––––––––––––––––––––––– */
+document.addEventListener(‘DOMContentLoaded’, () => {
+document.getElementById(‘teamFilter’).addEventListener(‘change’, applyFilters);
+document.getElementById(‘repoFilter’).addEventListener(‘change’, applyFilters);
+loadData();
+setInterval(loadData, AUTO_REFRESH_MS);
+});
+</script>
+
+</body>
+</html>
