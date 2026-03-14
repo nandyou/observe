@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RepoRadar — GitLab Repository Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+/* ============================================================
+   RepoRadar — GitLab Repository Dashboard
+   repo-dashboard.css
+   ============================================================ */
+
+/* ── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design Tokens ──────────────────────────────────────── */
+:root {
+–bg:       #060810;
+–surface:  #0d1117;
+–surface2: #111720;
+–surface3: #0a0e18;
+–border:   #1e2736;
+–border2:  #263142;
+–accent:   #00e5ff;
+–accent2:  #7c3aed;
+–success:  #00c896;
+–warn:     #f59e0b;
+–danger:   #ef4444;
+–critical: #ff3d71;
+–info:     #3b82f6;
+–text:     #e2e8f0;
+–muted:    #64748b;
+–glow:     0 0 20px rgba(0,229,255,0.15);
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+body {
+font-family: ‘DM Sans’, sans-serif;
+background: var(–bg); color: var(–text);
+min-height: 100vh; overflow-x: hidden;
+}
+body::before {
+content: ‘’; position: fixed; inset: 0;
+background-image:
+linear-gradient(rgba(0,229,255,0.016) 1px, transparent 1px),
+linear-gradient(90deg, rgba(0,229,255,0.016) 1px, transparent 1px);
+background-size: 48px 48px;
+pointer-events: none; z-index: 0;
+}
+
+/* ── Page ───────────────────────────────────────────────── */
+.page-wrapper {
+position: relative; z-index: 1;
+max-width: 1600px; margin: 0 auto;
+padding: 0 28px 56px;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+header {
+display: flex; align-items: center; justify-content: space-between;
+padding: 20px 0 16px;
+border-bottom: 1px solid var(–border);
+margin-bottom: 20px;
+flex-wrap: wrap; gap: 12px;
+}
+.header-left  { display: flex; align-items: center; gap: 12px; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.header-divider { width:1px; height:26px; background:var(–border); flex-shrink:0; }
+
+.logo-mark {
+width:36px; height:36px; border-radius:9px;
+background: linear-gradient(135deg, var(–accent), var(–accent2));
+display:flex; align-items:center; justify-content:center;
+color:#000; box-shadow:var(–glow); flex-shrink:0;
+}
+h1 { font-size:1.15rem; font-weight:700; letter-spacing:-0.02em; }
+h1 span { color:var(–accent); }
+.header-subtitle {
+font-family:‘JetBrains Mono’,monospace;
+font-size:0.62rem; color:var(–muted); margin-top:2px;
+}
+
+/* ── Filters ────────────────────────────────────────────── */
+.filter-group { display:flex; flex-direction:column; gap:3px; }
+.filter-label {
+font-family:‘JetBrains Mono’,monospace;
+font-size:0.56rem; letter-spacing:0.1em;
+color:var(–muted); text-transform:uppercase;
+}
+.filter-select {
+background:var(–surface); border:1px solid var(–border);
+border-radius:6px; color:var(–text);
+font-family:‘JetBrains Mono’,monospace;
+font-size:0.7rem; padding:5px 10px;
+outline:none; cursor:pointer; min-width:130px;
+}
+.filter-select:focus { border-color:var(–accent); }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.last-updated { font-family:‘JetBrains Mono’,monospace; font-size:0.63rem; color:var(–muted); white-space:nowrap; }
+.btn-refresh {
+font-family:‘JetBrains Mono’,monospace; font-size:0.68rem;
+padding:5px 13px; border-radius:6px;
+border:1px solid var(–accent); background:transparent; color:var(–accent);
+cursor:pointer; transition:all 0.2s; letter-spacing:0.05em; white-space:nowrap;
+}
+.btn-refresh:hover    { background:rgba(0,229,255,0.08); box-shadow:var(–glow); }
+.btn-refresh.spinning { opacity:0.45; pointer-events:none; }
+
+/* ── Summary Strip ──────────────────────────────────────── */
+.summary-strip {
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+gap:10px; margin-bottom:18px;
+}
+.stat-card {
+background:var(–surface); border:1px solid var(–border);
+border-radius:10px; padding:13px 16px;
+position:relative; overflow:hidden;
+transition:border-color 0.2s, transform 0.2s;
+}
+.stat-card:hover { border-color:var(–card-color,var(–accent)); transform:translateY(-1px); }
+.stat-card::before {
+content:’’; position:absolute; top:0; left:0; right:0; height:2px;
+background:var(–card-color,var(–accent));
+}
+.stat-label {
+font-family:‘JetBrains Mono’,monospace; font-size:0.57rem;
+letter-spacing:0.1em; text-transform:uppercase; color:var(–muted); margin-bottom:6px;
+}
+.stat-value { font-size:1.6rem; font-weight:700; letter-spacing:-0.03em; line-height:1; color:var(–card-color,var(–accent)); }
+.stat-sub   { font-size:0.65rem; color:var(–muted); margin-top:3px; }
+
+/* ── Search bar ─────────────────────────────────────────── */
+.search-bar {
+display:flex; align-items:center; gap:8px;
+background:var(–surface); border:1px solid var(–border);
+border-radius:8px; padding:8px 14px; margin-bottom:16px;
+}
+.search-bar input {
+flex:1; background:transparent; border:none; outline:none;
+color:var(–text); font-family:‘DM Sans’,sans-serif; font-size:0.85rem;
+}
+.search-bar input::placeholder { color:var(–muted); }
+.search-bar .si { color:var(–muted); font-size:0.9rem; }
+
+/* ── REPO TABLE ─────────────────────────────────────────── */
+.repo-list { display:flex; flex-direction:column; gap:6px; }
+
+/* ── Repo Card ──────────────────────────────────────────── */
+.repo-card {
+background:var(–surface); border:1px solid var(–border);
+border-radius:12px; overflow:hidden;
+transition:border-color 0.2s;
+}
+.repo-card:hover { border-color:var(–border2); }
+.repo-card.expanded { border-color:var(–accent); }
+
+/* ── Primary Row ────────────────────────────────────────── */
+.repo-row {
+display:grid;
+grid-template-columns: 260px 100px 1fr 1fr 1fr 1fr 180px 44px;
+align-items:center;
+padding:12px 16px; gap:12px;
+cursor:default;
+}
+@media(max-width:1300px) {
+.repo-row { grid-template-columns:220px 90px 1fr 1fr 1fr 180px 40px; }
+}
+
+/* ── Repo Identity ──────────────────────────────────────── */
+.repo-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+.repo-type-icon {
+width:30px; height:30px; border-radius:7px; flex-shrink:0;
+display:flex; align-items:center; justify-content:center;
+font-size:0.68rem; font-weight:700; font-family:‘JetBrains Mono’,monospace;
+}
+.type-api  { background:rgba(0,229,255,0.1);  color:var(–accent);  border:1px solid rgba(0,229,255,0.25); }
+.type-mfe  { background:rgba(124,58,237,0.1); color:#a78bfa;        border:1px solid rgba(124,58,237,0.3); }
+.type-lib  { background:rgba(0,200,150,0.1);  color:var(–success); border:1px solid rgba(0,200,150,0.25); }
+.type-tool { background:rgba(245,158,11,0.1); color:var(–warn);    border:1px solid rgba(245,158,11,0.25); }
+
+.repo-name-wrap { min-width:0; }
+.repo-name  { font-weight:600; font-size:0.82rem; color:var(–text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.repo-group { font-family:‘JetBrains Mono’,monospace; font-size:0.6rem; color:var(–muted); margin-top:1px; }
+
+/* ── Branch counts ──────────────────────────────────────── */
+.branch-counts { display:flex; flex-direction:column; gap:4px; }
+.branch-btn {
+display:inline-flex; align-items:center; gap:5px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; font-weight:600;
+padding:3px 8px; border-radius:5px; border:1px solid; cursor:pointer;
+background:transparent; transition:all 0.15s; white-space:nowrap;
+}
+.branch-btn.protected { color:#a78bfa; border-color:rgba(124,58,237,0.35); }
+.branch-btn.protected:hover,
+.branch-btn.protected.active { background:rgba(124,58,237,0.12); border-color:#a78bfa; }
+.branch-btn.feature  { color:var(–accent); border-color:rgba(0,229,255,0.3); }
+.branch-btn.feature:hover,
+.branch-btn.feature.active { background:rgba(0,229,255,0.08); border-color:var(–accent); }
+
+/* ── Quality cell ───────────────────────────────────────── */
+.quality-cell { display:flex; flex-direction:column; gap:4px; }
+.quality-row  { display:flex; align-items:center; gap:6px; }
+.quality-label { font-family:‘JetBrains Mono’,monospace; font-size:0.58rem; color:var(–muted); width:36px; flex-shrink:0; }
+.cov-bar-wrap  { flex:1; }
+.cov-bar-track { height:4px; background:var(–border); border-radius:2px; overflow:hidden; }
+.cov-bar-fill  { height:100%; border-radius:2px; transition:width 0.5s ease; }
+.cov-pct { font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; font-weight:600; width:34px; text-align:right; flex-shrink:0; }
+.cov-high { color:var(–success); }
+.cov-mid  { color:var(–warn); }
+.cov-low  { color:var(–danger); }
+
+/* ── Sonar issues cell ──────────────────────────────────── */
+.sonar-cell { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.sonar-badge {
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; font-weight:700;
+padding:3px 7px; border-radius:5px; border:1px solid;
+display:inline-flex; align-items:center; gap:3px; white-space:nowrap;
+}
+.sonar-blocker  { background:rgba(255,61,113,0.1);  border-color:rgba(255,61,113,0.35); color:var(–critical); }
+.sonar-critical { background:rgba(239,68,68,0.1);   border-color:rgba(239,68,68,0.3);   color:var(–danger); }
+.sonar-major    { background:rgba(245,158,11,0.1);  border-color:rgba(245,158,11,0.3);  color:var(–warn); }
+.sonar-minor    { background:rgba(100,116,139,0.1); border-color:rgba(100,116,139,0.3); color:var(–muted); }
+.sonar-info     { background:rgba(59,130,246,0.1);  border-color:rgba(59,130,246,0.3);  color:var(–info); }
+
+/* ── Perf button ────────────────────────────────────────── */
+.perf-btn {
+display:inline-flex; align-items:center; gap:5px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; font-weight:600;
+padding:4px 10px; border-radius:6px; cursor:pointer;
+border:1px solid rgba(0,200,150,0.3); color:var(–success);
+background:transparent; transition:all 0.15s; white-space:nowrap;
+}
+.perf-btn:hover, .perf-btn.active { background:rgba(0,200,150,0.08); border-color:var(–success); }
+.perf-none { font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; color:var(–muted); }
+
+/* ── Deployment cell ────────────────────────────────────── */
+.deploy-cell { display:flex; flex-direction:column; gap:4px; }
+.deploy-btn {
+display:inline-flex; align-items:center; gap:6px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem; font-weight:600;
+padding:4px 10px; border-radius:6px; cursor:pointer;
+border:1px solid; background:transparent; transition:all 0.15s; white-space:nowrap;
+}
+.deploy-summary { font-size:0.68rem; color:var(–muted); }
+.env-count-chip {
+font-family:‘JetBrains Mono’,monospace; font-size:0.6rem;
+padding:1px 6px; border-radius:3px;
+}
+.deploy-btn.has-issues { border-color:rgba(239,68,68,0.35); color:var(–danger); }
+.deploy-btn.has-issues:hover, .deploy-btn.has-issues.active { background:rgba(239,68,68,0.08); }
+.deploy-btn.healthy { border-color:rgba(0,200,150,0.3); color:var(–success); }
+.deploy-btn.healthy:hover, .deploy-btn.healthy.active { background:rgba(0,200,150,0.08); }
+
+/* ── Row expand toggle ──────────────────────────────────── */
+.row-expand-btn {
+width:28px; height:28px; border-radius:6px;
+background:transparent; border:1px solid var(–border);
+color:var(–muted); cursor:pointer; font-size:0.75rem;
+display:flex; align-items:center; justify-content:center;
+transition:all 0.15s; flex-shrink:0;
+}
+.row-expand-btn:hover { border-color:var(–accent); color:var(–accent); }
+.row-expand-btn.open  { border-color:var(–accent); color:var(–accent); background:rgba(0,229,255,0.06); }
+
+/* ── Expand Panels ──────────────────────────────────────── */
+.expand-area {
+border-top:1px solid var(–border);
+background:var(–surface3);
+display:none;
+}
+.expand-area.visible { display:block; }
+
+.expand-tabs {
+display:flex; gap:0;
+border-bottom:1px solid var(–border);
+padding:0 16px;
+}
+.expand-tab {
+font-family:‘JetBrains Mono’,monospace; font-size:0.65rem;
+padding:9px 14px; cursor:pointer; border:none;
+background:transparent; color:var(–muted);
+border-bottom:2px solid transparent;
+transition:all 0.15s; letter-spacing:0.04em;
+white-space:nowrap;
+}
+.expand-tab:hover { color:var(–text); }
+.expand-tab.active { color:var(–accent); border-bottom-color:var(–accent); }
+
+.expand-pane { display:none; padding:18px 18px 16px; }
+.expand-pane.active { display:block; }
+
+/* ── Branch detail panel ────────────────────────────────── */
+.branch-section-title {
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem;
+letter-spacing:0.1em; text-transform:uppercase;
+color:var(–muted); margin-bottom:10px; padding-bottom:6px;
+border-bottom:1px solid var(–border);
+}
+
+.branch-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.branch-table th {
+text-align:left; padding:7px 12px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.58rem;
+letter-spacing:0.08em; text-transform:uppercase;
+color:var(–muted); border-bottom:1px solid var(–border);
+white-space:nowrap;
+}
+.branch-table td {
+padding:9px 12px; border-bottom:1px solid rgba(30,39,54,0.4);
+vertical-align:middle;
+}
+.branch-table tr:last-child td { border-bottom:none; }
+.branch-table tbody tr { transition:background 0.1s; }
+.branch-table tbody tr:hover { background:rgba(0,229,255,0.02); }
+
+.branch-name-chip {
+font-family:‘JetBrains Mono’,monospace; font-size:0.65rem;
+padding:2px 8px; border-radius:4px; display:inline-block;
+}
+.branch-protected-chip { background:rgba(124,58,237,0.1); color:#a78bfa; border:1px solid rgba(124,58,237,0.3); }
+.branch-feature-chip   { background:rgba(0,229,255,0.07); color:var(–accent); border:1px solid rgba(0,229,255,0.2); }
+.branch-default-chip   { background:rgba(0,200,150,0.08); color:var(–success); border:1px solid rgba(0,200,150,0.25); }
+
+.inline-cov { display:flex; align-items:center; gap:6px; }
+.inline-cov-bar { width:60px; }
+
+/* ── Sonar detail section ───────────────────────────────── */
+.sonar-detail-grid {
+display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px;
+margin-top:10px;
+}
+.sonar-detail-card {
+background:var(–surface2); border:1px solid var(–border);
+border-radius:8px; padding:12px 14px;
+}
+.sonar-detail-label {
+font-family:‘JetBrains Mono’,monospace; font-size:0.58rem;
+letter-spacing:0.1em; text-transform:uppercase; color:var(–muted); margin-bottom:6px;
+}
+.sonar-detail-value { font-size:1.4rem; font-weight:700; letter-spacing:-0.02em; }
+.sonar-detail-sub { font-size:0.65rem; color:var(–muted); margin-top:3px; }
+
+/* ── Perf panel ─────────────────────────────────────────── */
+.perf-summary-grid {
+display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:14px;
+}
+.perf-stat {
+background:var(–surface2); border:1px solid var(–border);
+border-radius:8px; padding:10px 14px;
+}
+.perf-stat-label { font-family:‘JetBrains Mono’,monospace; font-size:0.58rem; letter-spacing:0.08em; text-transform:uppercase; color:var(–muted); margin-bottom:5px; }
+.perf-stat-value { font-size:1.25rem; font-weight:700; }
+.perf-stat-value.ok  { color:var(–success); }
+.perf-stat-value.mid { color:var(–warn); }
+.perf-stat-value.bad { color:var(–danger); }
+.perf-stat-sub { font-size:0.62rem; color:var(–muted); margin-top:2px; }
+
+.perf-endpoints-table { width:100%; border-collapse:collapse; font-size:0.76rem; }
+.perf-endpoints-table th {
+text-align:left; padding:6px 10px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.57rem;
+letter-spacing:0.08em; text-transform:uppercase; color:var(–muted);
+border-bottom:1px solid var(–border);
+}
+.perf-endpoints-table td { padding:8px 10px; border-bottom:1px solid rgba(30,39,54,0.4); vertical-align:middle; }
+.perf-endpoints-table tr:last-child td { border-bottom:none; }
+.perf-endpoints-table tbody tr:hover { background:rgba(0,229,255,0.02); }
+
+.tput-bar { display:flex; align-items:center; gap:6px; }
+.tput-track { height:4px; background:var(–border); border-radius:2px; overflow:hidden; flex:1; }
+.tput-fill  { height:100%; border-radius:2px; background:var(–accent); }
+
+.status-pill {
+font-family:‘JetBrains Mono’,monospace; font-size:0.6rem; font-weight:700;
+padding:2px 7px; border-radius:4px; display:inline-block;
+}
+.pass { background:rgba(0,200,150,0.1);  color:var(–success); }
+.fail { background:rgba(239,68,68,0.1);  color:var(–danger);  }
+.warn-pill { background:rgba(245,158,11,0.1); color:var(–warn); }
+
+/* ── Deployment panel ───────────────────────────────────── */
+.deploy-env-group { margin-bottom:16px; }
+.deploy-env-group:last-child { margin-bottom:0; }
+.env-group-title {
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem;
+letter-spacing:0.12em; text-transform:uppercase;
+color:var(–muted); margin-bottom:8px; padding-bottom:5px;
+border-bottom:1px solid var(–border);
+display:flex; align-items:center; gap:8px;
+}
+.env-type-badge {
+font-family:‘JetBrains Mono’,monospace; font-size:0.6rem; font-weight:700;
+padding:1px 7px; border-radius:3px;
+}
+.env-dev  { background:rgba(0,229,255,0.1);  color:var(–accent);  border:1px solid rgba(0,229,255,0.25); }
+.env-sit  { background:rgba(124,58,237,0.1); color:#a78bfa;        border:1px solid rgba(124,58,237,0.3); }
+.env-uat  { background:rgba(245,158,11,0.1); color:var(–warn);    border:1px solid rgba(245,158,11,0.3); }
+.env-prod { background:rgba(239,68,68,0.1);  color:var(–danger);  border:1px solid rgba(239,68,68,0.3); }
+
+.deploy-instances-grid {
+display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:8px;
+}
+.deploy-instance {
+background:var(–surface2); border:1px solid var(–border);
+border-radius:8px; padding:11px 13px;
+position:relative; transition:border-color 0.2s;
+}
+.deploy-instance:hover { border-color:var(–border2); }
+.deploy-instance.healthy-inst { border-left:3px solid var(–success); }
+.deploy-instance.unhealthy-inst { border-left:3px solid var(–danger); }
+.deploy-instance.degraded-inst  { border-left:3px solid var(–warn); }
+
+.inst-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; }
+.inst-name { font-weight:600; font-size:0.78rem; color:var(–text); }
+.health-dot {
+width:8px; height:8px; border-radius:50%; flex-shrink:0;
+}
+.health-dot.up       { background:var(–success); box-shadow:0 0 6px var(–success); animation:hpulse 2s infinite; }
+.health-dot.down     { background:var(–danger); }
+.health-dot.degraded { background:var(–warn); box-shadow:0 0 6px var(–warn); animation:hpulse 2s infinite; }
+@keyframes hpulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.inst-row {
+display:flex; align-items:center; gap:6px;
+font-family:‘JetBrains Mono’,monospace; font-size:0.62rem;
+color:var(–muted); margin-top:3px;
+}
+.inst-row .key  { color:var(–muted); width:56px; flex-shrink:0; }
+.inst-row .val  { color:var(–text); font-weight:500; }
+.inst-row .ver  { color:var(–accent); }
+.tyk-link {
+color:var(–info); text-decoration:none;
+display:inline-flex; align-items:center; gap:3px;
+transition:color 0.15s;
+max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.tyk-link:hover { color:var(–accent); text-decoration:underline; }
+
+/* ── Column headers row ─────────────────────────────────── */
+.repo-col-header {
+display:grid;
+grid-template-columns: 260px 100px 1fr 1fr 1fr 1fr 180px 44px;
+padding:7px 16px; gap:12px;
+margin-bottom:4px;
+}
+@media(max-width:1300px) {
+.repo-col-header { grid-template-columns:220px 90px 1fr 1fr 1fr 180px 40px; }
+}
+.col-hdr {
+font-family:‘JetBrains Mono’,monospace; font-size:0.57rem;
+letter-spacing:0.1em; text-transform:uppercase; color:var(–muted);
+}
+
+/* ── States ─────────────────────────────────────────────── */
+.state-overlay {
+display:flex; flex-direction:column; align-items:center; justify-content:center;
+min-height:280px; gap:12px;
+color:var(–muted); font-family:‘JetBrains Mono’,monospace; font-size:0.74rem;
+}
+.spinner {
+width:24px; height:24px;
+border:2px solid var(–border); border-top-color:var(–accent);
+border-radius:50%; animation:spin 0.7s linear infinite;
+}
+.retry-btn {
+margin-top:6px; font-family:‘JetBrains Mono’,monospace; font-size:0.68rem;
+padding:5px 14px; border-radius:6px;
+border:1px solid var(–danger); background:transparent; color:var(–danger); cursor:pointer;
+}
+.retry-btn:hover { background:rgba(239,68,68,0.08); }
+
+/* ── Misc ───────────────────────────────────────────────── */
+.section-gap { margin-bottom:14px; }
+.no-data { font-family:‘JetBrains Mono’,monospace; font-size:0.68rem; color:var(–muted); padding:10px 0; }
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes spin   { to { transform:rotate(360deg); } }
+@keyframes cardIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.repo-card { animation:cardIn 0.3s ease both; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media(max-width:900px) {
+.page-wrapper { padding:0 12px 36px; }
+.repo-row { grid-template-columns:1fr; gap:8px; }
+.repo-col-header { display:none; }
+h1 { font-size:1rem; }
+}
+</style>
+
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- Header -->
+
+  <header>
+    <div class="header-left">
+      <div class="logo-mark">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.87 9.75 19.79 19.79 0 0 1 1.88 1.1 2 2 0 0 1 3.87 0h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 14.92z"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Repo<span>Radar</span></h1>
+        <div class="header-subtitle">gitlab · repositories · quality · deployments</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="filter-group">
+        <label class="filter-label" for="typeFilter">TYPE</label>
+        <select id="typeFilter" class="filter-select">
+          <option value="">All types</option>
+          <option value="api">API</option>
+          <option value="mfe">Microfrontend</option>
+          <option value="lib">Library</option>
+          <option value="tool">Tooling</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label" for="groupFilter">GROUP</label>
+        <select id="groupFilter" class="filter-select"><option value="">All groups</option></select>
+      </div>
+      <div class="header-divider"></div>
+      <div class="last-updated" id="lastUpdated">—</div>
+      <button class="btn-refresh" id="refreshBtn" onclick="loadData()">⟳ REFRESH</button>
+    </div>
+  </header>
+
+  <!-- Summary -->
+
+  <div class="summary-strip" id="summaryStrip"></div>
+
+  <!-- Search -->
+
+  <div class="search-bar">
+    <span class="si">⌕</span>
+    <input type="text" placeholder="Search repository name or group…" oninput="onSearch(this.value)"/>
+  </div>
+
+  <!-- Column headers -->
+
+  <div class="repo-col-header">
+    <div class="col-hdr">Repository</div>
+    <div class="col-hdr">Branches</div>
+    <div class="col-hdr">Test Coverage (main)</div>
+    <div class="col-hdr">SonarQube Issues</div>
+    <div class="col-hdr">Performance</div>
+    <div class="col-hdr">Deployments</div>
+    <div class="col-hdr"></div>
+    <div class="col-hdr"></div>
+  </div>
+
+  <!-- Repo list -->
+
+  <div class="repo-list" id="repoList">
+    <div class="state-overlay">
+      <div class="spinner"></div>
+      <div>Loading repositories…</div>
+    </div>
+  </div>
+
+</div>
+<script>
+/* ============================================================
+   RepoRadar — GitLab Repository Dashboard
+   repo-dashboard.js
+
+Sections:
+1. State & constants
+2. Mock API data
+3. Utilities
+4. Summary strip
+5. Repo list renderer
+6. Expand panel renderers
+6a. Branch + quality pane
+6b. Perf pane
+6c. Deployment pane
+7. Toggle logic
+8. Filters & search
+9. Data loading
+10. Init
+============================================================ */
+‘use strict’;
+
+/* –––––––––––––––––––––––––––––
+
+1. STATE
+   ––––––––––––––––––––––––––––– */
+   let allRepos    = [];
+   let filtered    = [];
+   let searchQuery = ‘’;
+   // Track which expand panel is open per repo: { repoId: { area: bool, activeTab: ‘branches’|‘perf’|‘deploys’ } }
+   const expandState = {};
+
+/* –––––––––––––––––––––––––––––
+2. MOCK API
+──────────────────────────────────────────────────────────
+Replace mockApiResponse() with:
+const res = await fetch(’/api/gitlab/repos’);
+return res.json();
+
+Response shape documented in JSDoc below.
+––––––––––––––––––––––––––––– */
+
+/**
+
+- @typedef {Object} RepoBranch
+- @property {string}  name
+- @property {boolean} protected
+- @property {boolean} default
+- @property {{unit:number, integration:number, mutation:number}} coverage
+- @property {{blocker:number,critical:number,major:number,minor:number,info:number}} sonar
+  */
+
+/**
+
+- @typedef {Object} PerfEndpoint
+- @property {string} name
+- @property {number} p50Ms
+- @property {number} p95Ms
+- @property {number} p99Ms
+- @property {number} throughputRps
+- @property {number} errorPct
+- @property {‘pass’|‘warn’|‘fail’} status
+  */
+
+/**
+
+- @typedef {Object} DeployInstance
+- @property {string} instanceName
+- @property {‘dev’|‘sit’|‘uat’|‘prod’} envType
+- @property {string} group        // e.g. “SIT-1”, “DEV-A”
+- @property {string} apiVersion
+- @property {string} webVersion
+- @property {‘up’|‘down’|‘degraded’} health
+- @property {string} tykUrl
+  */
+
+function mockApiResponse() {
+const rnd  = (lo, hi)  => Math.floor(Math.random() * (hi - lo + 1)) + lo;
+const pct  = ()        => rnd(40, 98);
+const pick = arr       => arr[rnd(0, arr.length - 1)];
+const ver  = ()        => `${rnd(1,3)}.${rnd(0,9)}.${rnd(0,20)}`;
+
+const SONAR = () => ({
+blocker:  rnd(0,4), critical: rnd(0,12), major: rnd(0,30),
+minor: rnd(0,60),   info: rnd(0,20),
+});
+
+const COVERAGE = () => ({ unit: pct(), integration: pct(), mutation: pct() });
+
+const makeBranch = (name, isProtected, isDefault=false) => ({
+name, protected: isProtected, default: isDefault,
+coverage: COVERAGE(), sonar: SONAR(),
+});
+
+const PERF_ENDPOINTS = (names) => names.map(name => {
+const p50  = rnd(12, 350);
+const tput = rnd(40, 800);
+const err  = parseFloat((Math.random() * 3).toFixed(2));
+const st   = err > 2 ? ‘fail’ : p50 > 200 ? ‘warn’ : ‘pass’;
+return { name, p50Ms: p50, p95Ms: p50 * rnd(15,25)/10, p99Ms: p50 * rnd(20,35)/10,
+throughputRps: tput, errorPct: err, status: st };
+});
+
+const DEPLOY_INSTANCES = (envs) => envs.map(e => ({
+instanceName: e.name, envType: e.type, group: e.group,
+apiVersion: ver(), webVersion: ver(),
+health: pick([‘up’,‘up’,‘up’,‘degraded’,‘down’]),
+tykUrl: `https://tyk-gateway.internal/${e.type}/${e.name.toLowerCase()}/api`,
+}));
+
+const repos = [
+/* ── APIs ───────────────────────────────────────────── */
+{
+id: ‘r1’, name: ‘user-management-api’, group: ‘platform/apis’, type: ‘api’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘release/v2.1’, true),
+makeBranch(‘release/v2.0’, true),
+makeBranch(‘feature/oauth-refresh’, false),
+makeBranch(‘feature/rate-limiting’, false),
+makeBranch(‘fix/session-expiry’, false),
+],
+perf: {
+runDate: ‘2026-03-10’, duration: ‘45m’, virtualUsers: 200, rampUp: ‘5m’,
+totalRequests: 485200, overallErrorPct: 0.8,
+endpoints: PERF_ENDPOINTS([’/api/v1/users’,’/api/v1/users/:id’,’/api/v1/auth/login’,’/api/v1/auth/refresh’]),
+},
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-1’, type:‘dev’, group:‘DEV-A’}, {name:‘dev-2’, type:‘dev’, group:‘DEV-A’},
+{name:‘sit-1’, type:‘sit’, group:‘SIT-1’}, {name:‘sit-2’, type:‘sit’, group:‘SIT-1’},
+{name:‘sit-3’, type:‘sit’, group:‘SIT-2’}, {name:‘uat-1’, type:‘uat’, group:‘UAT’},
+]),
+},
+{
+id: ‘r2’, name: ‘payment-gateway-api’, group: ‘platform/apis’, type: ‘api’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘release/v1.8’, true),
+makeBranch(‘hotfix/txn-timeout’, false),
+makeBranch(‘feature/pci-compliance’, false),
+],
+perf: {
+runDate: ‘2026-03-08’, duration: ‘30m’, virtualUsers: 100, rampUp: ‘3m’,
+totalRequests: 210000, overallErrorPct: 0.3,
+endpoints: PERF_ENDPOINTS([’/api/v1/payments’,’/api/v1/payments/:id/status’,’/api/v1/refunds’]),
+},
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-1’, type:‘dev’, group:‘DEV-A’}, {name:‘sit-1’, type:‘sit’, group:‘SIT-1’},
+{name:‘uat-1’, type:‘uat’, group:‘UAT’},
+]),
+},
+{
+id: ‘r3’, name: ‘notification-service’, group: ‘platform/apis’, type: ‘api’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘develop’, true),
+makeBranch(‘feature/sms-provider’, false),
+makeBranch(‘feature/push-notifications’, false),
+makeBranch(‘fix/email-templates’, false),
+],
+perf: null,
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-1’, type:‘dev’, group:‘DEV-A’}, {name:‘sit-1’, type:‘sit’, group:‘SIT-1’},
+{name:‘sit-2’, type:‘sit’, group:‘SIT-2’},
+]),
+},
+/* ── Microfrontends ─────────────────────────────────── */
+{
+id: ‘r4’, name: ‘checkout-mfe’, group: ‘platform/microfrontends’, type: ‘mfe’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘release/v3.2’, true),
+makeBranch(‘feature/express-checkout’, false),
+makeBranch(‘feature/apple-pay’, false),
+makeBranch(‘feature/google-pay’, false),
+makeBranch(‘fix/cart-ui-ios’, false),
+],
+perf: {
+runDate: ‘2026-03-09’, duration: ‘20m’, virtualUsers: 500, rampUp: ‘2m’,
+totalRequests: 325000, overallErrorPct: 1.2,
+endpoints: PERF_ENDPOINTS([’/checkout’,’/checkout/payment’,’/checkout/confirmation’]),
+},
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-1’, type:‘dev’, group:‘DEV-A’}, {name:‘dev-2’, type:‘dev’, group:‘DEV-B’},
+{name:‘sit-1’, type:‘sit’, group:‘SIT-1’}, {name:‘sit-2’, type:‘sit’, group:‘SIT-1’},
+{name:‘sit-3’, type:‘sit’, group:‘SIT-2’}, {name:‘sit-4’, type:‘sit’, group:‘SIT-2’},
+{name:‘uat-1’, type:‘uat’, group:‘UAT’}, {name:‘uat-2’, type:‘uat’, group:‘UAT’},
+]),
+},
+{
+id: ‘r5’, name: ‘account-portal-mfe’, group: ‘platform/microfrontends’, type: ‘mfe’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘develop’, true),
+makeBranch(‘feature/2fa-setup’, false),
+makeBranch(‘feature/dark-mode’, false),
+],
+perf: null,
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-1’, type:‘dev’, group:‘DEV-A’},
+{name:‘sit-1’, type:‘sit’, group:‘SIT-1’},
+{name:‘uat-1’, type:‘uat’, group:‘UAT’},
+]),
+},
+/* ── Libraries ──────────────────────────────────────── */
+{
+id: ‘r6’, name: ‘ui-component-library’, group: ‘platform/libraries’, type: ‘lib’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘release/v5.0’, true),
+makeBranch(‘feature/design-tokens-v2’, false),
+makeBranch(‘fix/a11y-button’, false),
+],
+perf: null,
+deployments: [],
+},
+{
+id: ‘r7’, name: ‘api-client-sdk’, group: ‘platform/libraries’, type: ‘lib’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘feature/graphql-support’, false),
+makeBranch(‘feature/retry-interceptor’, false),
+],
+perf: null,
+deployments: [],
+},
+/* ── Tooling ─────────────────────────────────────────── */
+{
+id: ‘r8’, name: ‘ci-pipeline-templates’, group: ‘platform/tooling’, type: ‘tool’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘feature/trivy-scanning’, false),
+makeBranch(‘feature/sbom-generation’, false),
+],
+perf: null,
+deployments: [],
+},
+{
+id: ‘r9’, name: ‘infra-terraform-modules’, group: ‘platform/tooling’, type: ‘tool’,
+branches: [
+makeBranch(‘main’, true, true),
+makeBranch(‘release/eks-v3’, true),
+makeBranch(‘feature/rds-aurora’, false),
+makeBranch(‘feature/waf-rules’, false),
+makeBranch(‘fix/vpc-cidr-overlap’, false),
+],
+perf: null,
+deployments: DEPLOY_INSTANCES([
+{name:‘dev-cluster’, type:‘dev’, group:‘DEV’}, {name:‘sit-cluster’, type:‘sit’, group:‘SIT’},
+]),
+},
+];
+
+return {
+meta: { fetchedAt: new Date().toISOString(), totalRepos: repos.length },
+repos,
+};
+}
+
+/* –––––––––––––––––––––––––––––
+3. UTILITIES
+––––––––––––––––––––––––––––– */
+const TYPE_LABEL = { api:‘API’, mfe:‘MFE’, lib:‘LIB’, tool:‘TOOL’ };
+const TYPE_CLS   = { api:‘type-api’, mfe:‘type-mfe’, lib:‘type-lib’, tool:‘type-tool’ };
+
+function covCls(v) { return v >= 75 ? ‘cov-high’ : v >= 50 ? ‘cov-mid’ : ‘cov-low’; }
+function covBarColor(v) { return v >= 75 ? ‘var(–success)’ : v >= 50 ? ‘var(–warn)’ : ‘var(–danger)’; }
+
+function healthCls(h) { return h === ‘up’ ? ‘healthy-inst’ : h === ‘degraded’ ? ‘degraded-inst’ : ‘unhealthy-inst’; }
+function deployBtnCls(deployments) {
+if (!deployments.length) return ‘healthy’;
+return deployments.some(d => d.health === ‘down’) ? ‘has-issues’ :
+deployments.some(d => d.health === ‘degraded’) ? ‘has-issues’ : ‘healthy’;
+}
+
+function mainBranch(branches) { return branches.find(b => b.default) || branches[0]; }
+
+function groupByEnvType(deployments) {
+const map = {};
+deployments.forEach(d => {
+if (!map[d.envType]) map[d.envType] = [];
+map[d.envType].push(d);
+});
+return map;
+}
+
+/* –––––––––––––––––––––––––––––
+4. SUMMARY STRIP
+––––––––––––––––––––––––––––– */
+function renderSummary(repos) {
+const total     = repos.length;
+const apis      = repos.filter(r => r.type === ‘api’).length;
+const mfes      = repos.filter(r => r.type === ‘mfe’).length;
+const libs      = repos.filter(r => r.type === ‘lib’).length;
+const tools     = repos.filter(r => r.type === ‘tool’).length;
+const withPerf  = repos.filter(r => r.perf).length;
+const unhealthy = repos.flatMap(r => r.deployments).filter(d => d.health !== ‘up’).length;
+
+const cards = [
+{ label:‘TOTAL REPOS’,    value:total,     sub:`${apis} APIs, ${mfes} MFEs`,              color:‘var(–accent)’  },
+{ label:‘LIBRARIES’,      value:libs,      sub:‘shared packages’,                         color:‘var(–success)’ },
+{ label:‘TOOLING’,        value:tools,     sub:‘infra & CI’,                              color:‘var(–warn)’    },
+{ label:‘PERF TESTED’,    value:withPerf,  sub:`of ${total} repos`,                       color:’#818cf8’        },
+{ label:‘UNHEALTHY INSTS’,value:unhealthy, sub:‘across all envs’,                         color: unhealthy ? ‘var(–danger)’ : ‘var(–success)’ },
+];
+
+document.getElementById(‘summaryStrip’).innerHTML = cards.map(c => ` <div class="stat-card" style="--card-color:${c.color}"> <div class="stat-label">${c.label}</div> <div class="stat-value">${c.value}</div> <div class="stat-sub">${c.sub}</div> </div>`).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+5. REPO LIST RENDERER
+––––––––––––––––––––––––––––– */
+function renderRepoList(repos) {
+const container = document.getElementById(‘repoList’);
+if (!repos.length) {
+container.innerHTML = `<div class="state-overlay"><div style="font-size:2rem;opacity:.3">⌀</div><div>No repositories match your filters</div></div>`;
+return;
+}
+
+container.innerHTML = repos.map((repo, idx) => repoCardHtml(repo, idx)).join(’’);
+}
+
+function repoCardHtml(repo, idx) {
+const main       = mainBranch(repo.branches);
+const protected_ = repo.branches.filter(b => b.protected);
+const features   = repo.branches.filter(b => !b.protected);
+const sonar      = main.sonar;
+const cov        = main.coverage;
+const deploys    = repo.deployments;
+const totalIssues = sonar.blocker + sonar.critical + sonar.major;
+
+// Coverage mini bars (unit, int, mut)
+const covBars = [
+{ label:‘UT’, val: cov.unit },
+{ label:‘IT’, val: cov.integration },
+{ label:‘MT’, val: cov.mutation },
+].map(c => ` <div class="quality-row"> <span class="quality-label">${c.label}</span> <div class="cov-bar-wrap"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:${c.val}%;background:${covBarColor(c.val)}"></div></div></div> <span class="cov-pct ${covCls(c.val)}">${c.val}%</span> </div>`).join(’’);
+
+// Sonar badges (only non-zero)
+const sonarBadges = [
+{ key:‘blocker’,  cls:‘sonar-blocker’,  val:sonar.blocker,  label:‘B’ },
+{ key:‘critical’, cls:‘sonar-critical’, val:sonar.critical, label:‘C’ },
+{ key:‘major’,    cls:‘sonar-major’,    val:sonar.major,    label:‘M’ },
+{ key:‘minor’,    cls:‘sonar-minor’,    val:sonar.minor,    label:‘m’ },
+{ key:‘info’,     cls:‘sonar-info’,     val:sonar.info,     label:‘I’ },
+].filter(s => s.val > 0)
+.map(s => `<span class="sonar-badge ${s.cls}" title="${s.key}">${s.label} ${s.val}</span>`)
+.join(’’);
+
+// Perf cell
+const perfCell = repo.perf
+? `<button class="perf-btn" id="perf-btn-${repo.id}" onclick="togglePane('${repo.id}','perf',this)"> ⚡ ${repo.perf.endpoints.length} endpoints </button>`
+: `<span class="perf-none">—</span>`;
+
+// Deploy cell
+let deployCell = ‘<span class="perf-none">No deploys</span>’;
+if (deploys.length) {
+const downCount = deploys.filter(d => d.health !== ‘up’).length;
+const cls       = deployBtnCls(deploys);
+const envTypes  = […new Set(deploys.map(d => d.envType.toUpperCase()))].join(’ · ’);
+deployCell = ` <button class="deploy-btn ${cls}" id="dep-btn-${repo.id}" onclick="togglePane('${repo.id}','deploys',this)"> ${downCount > 0 ? '⚠' : '✓'} ${deploys.length} instances </button> <div class="deploy-summary">${envTypes}</div>`;
+}
+
+return `
+
+  <div class="repo-card" id="card-${repo.id}" style="animation-delay:${idx*40}ms">
+    <div class="repo-row">
+
+```
+  <!-- Identity -->
+  <div class="repo-identity">
+    <div class="repo-type-icon ${TYPE_CLS[repo.type]}">${TYPE_LABEL[repo.type]}</div>
+    <div class="repo-name-wrap">
+      <div class="repo-name" title="${repo.name}">${repo.name}</div>
+      <div class="repo-group">${repo.group}</div>
+    </div>
+  </div>
+
+  <!-- Branch counts -->
+  <div class="branch-counts">
+    <button class="branch-btn protected" id="pb-btn-${repo.id}"
+      onclick="togglePane('${repo.id}','branches',this,'protected')">
+      🔒 ${protected_.length} protected
+    </button>
+    <button class="branch-btn feature" id="fb-btn-${repo.id}"
+      onclick="togglePane('${repo.id}','branches',this,'feature')">
+      ⎇ ${features.length} feature
+    </button>
+  </div>
+
+  <!-- Coverage (main branch) -->
+  <div class="quality-cell">${covBars}</div>
+
+  <!-- Sonar (main branch) -->
+  <div class="sonar-cell">${sonarBadges || '<span class="no-data">Clean ✓</span>'}</div>
+
+  <!-- Perf -->
+  <div>${perfCell}</div>
+
+  <!-- Deployments -->
+  <div class="deploy-cell">${deployCell}</div>
+
+  <!-- Row toggle -->
+  <button class="row-expand-btn" id="toggle-${repo.id}" onclick="toggleRow('${repo.id}')">▸</button>
+</div>
+
+<!-- Expand area -->
+<div class="expand-area" id="expand-${repo.id}">
+  <div class="expand-tabs" id="tabs-${repo.id}">
+    <button class="expand-tab active" onclick="switchTab('${repo.id}','branches',this)">Branches &amp; Quality</button>
+    ${repo.perf ? `<button class="expand-tab" onclick="switchTab('${repo.id}','perf',this)">⚡ Perf Report</button>` : ''}
+    ${deploys.length ? `<button class="expand-tab" onclick="switchTab('${repo.id}','deploys',this)">🚀 Deployments</button>` : ''}
+  </div>
+  <div id="pane-branches-${repo.id}" class="expand-pane active">${branchesPaneHtml(repo)}</div>
+  ${repo.perf ? `<div id="pane-perf-${repo.id}" class="expand-pane">${perfPaneHtml(repo)}</div>` : ''}
+  ${deploys.length ? `<div id="pane-deploys-${repo.id}" class="expand-pane">${deployPaneHtml(repo)}</div>` : ''}
+</div>
+```
+
+  </div>`;
+}
+
+/* –––––––––––––––––––––––––––––
+6a. BRANCH + QUALITY PANE
+––––––––––––––––––––––––––––– */
+function branchesPaneHtml(repo) {
+const protBranches = repo.branches.filter(b => b.protected);
+const featBranches = repo.branches.filter(b => !b.protected);
+
+function branchTableRows(branches) {
+return branches.map(b => {
+const c  = b.coverage;
+const s  = b.sonar;
+const chipCls = b.default ? ‘branch-default-chip’ : b.protected ? ‘branch-protected-chip’ : ‘branch-feature-chip’;
+const ttl = s.blocker + s.critical + s.major + s.minor + s.info;
+
+```
+  return `
+    <tr>
+      <td>
+        <span class="branch-name-chip ${chipCls}">${b.name}</span>
+        ${b.default ? '<span style="font-size:0.6rem;color:var(--muted);margin-left:4px">default</span>' : ''}
+      </td>
+      <td>
+        <div class="inline-cov">
+          <div class="inline-cov-bar"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:${c.unit}%;background:${covBarColor(c.unit)}"></div></div></div>
+          <span class="cov-pct ${covCls(c.unit)}">${c.unit}%</span>
+        </div>
+      </td>
+      <td>
+        <div class="inline-cov">
+          <div class="inline-cov-bar"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:${c.integration}%;background:${covBarColor(c.integration)}"></div></div></div>
+          <span class="cov-pct ${covCls(c.integration)}">${c.integration}%</span>
+        </div>
+      </td>
+      <td>
+        <div class="inline-cov">
+          <div class="inline-cov-bar"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:${c.mutation}%;background:${covBarColor(c.mutation)}"></div></div></div>
+          <span class="cov-pct ${covCls(c.mutation)}">${c.mutation}%</span>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          ${s.blocker  ? `<span class="sonar-badge sonar-blocker">B ${s.blocker}</span>` : ''}
+          ${s.critical ? `<span class="sonar-badge sonar-critical">C ${s.critical}</span>` : ''}
+          ${s.major    ? `<span class="sonar-badge sonar-major">M ${s.major}</span>` : ''}
+          ${s.minor    ? `<span class="sonar-badge sonar-minor">m ${s.minor}</span>` : ''}
+          ${s.info     ? `<span class="sonar-badge sonar-info">I ${s.info}</span>` : ''}
+          ${ttl === 0  ? '<span style="color:var(--success);font-size:0.65rem;font-family:JetBrains Mono,monospace">Clean ✓</span>' : ''}
+        </div>
+      </td>
+    </tr>`;
+}).join('');
+```
+
+}
+
+const tableHead = ` <thead><tr> <th>Branch</th> <th>Unit Coverage</th> <th>Integration Coverage</th> <th>Mutation Coverage</th> <th>Sonar Issues</th> </tr></thead>`;
+
+const protSection = protBranches.length ? ` <div class="branch-section-title section-gap">🔒 Protected Branches (${protBranches.length})</div> <div style="overflow-x:auto"><table class="branch-table">${tableHead}<tbody>${branchTableRows(protBranches)}</tbody></table></div>` : ‘’;
+
+const featSection = featBranches.length ? ` <div class="branch-section-title section-gap" style="margin-top:14px">⎇ Feature / Work Branches (${featBranches.length})</div> <div style="overflow-x:auto"><table class="branch-table">${tableHead}<tbody>${branchTableRows(featBranches)}</tbody></table></div>` : ‘’;
+
+return protSection + featSection;
+}
+
+/* –––––––––––––––––––––––––––––
+6b. PERF PANE
+––––––––––––––––––––––––––––– */
+function perfPaneHtml(repo) {
+if (!repo.perf) return ‘<div class="no-data">No performance data available.</div>’;
+const p = repo.perf;
+const maxTput = Math.max(…p.endpoints.map(e => e.throughputRps), 1);
+
+const overallStatus = p.overallErrorPct > 2 ? ‘bad’ : p.overallErrorPct > 0.5 ? ‘mid’ : ‘ok’;
+
+const summaryCards = [
+{ label:‘RUN DATE’,      value: p.runDate,              cls:’’,    sub:’’ },
+{ label:‘DURATION’,      value: p.duration,             cls:’’,    sub:’’ },
+{ label:‘VIRTUAL USERS’, value: p.virtualUsers,         cls:’’,    sub:`ramp-up ${p.rampUp}` },
+{ label:‘TOTAL REQUESTS’,value: p.totalRequests.toLocaleString(), cls:’’, sub:’’ },
+{ label:‘OVERALL ERROR’, value: `${p.overallErrorPct}%`, cls:overallStatus, sub:‘error rate’ },
+{ label:‘ENDPOINTS’,     value: p.endpoints.length,     cls:’’,    sub:‘tested’ },
+].map(c => `<div class="perf-stat"> <div class="perf-stat-label">${c.label}</div> <div class="perf-stat-value ${c.cls}">${c.value}</div> ${c.sub ?`<div class="perf-stat-sub">${c.sub}</div>` : ''} </div>`).join(’’);
+
+const endpointRows = p.endpoints.map(e => {
+const errCls = e.errorPct > 2 ? ‘bad’ : e.errorPct > 0.5 ? ‘mid’ : ‘ok’;
+const p99Cls = e.p99Ms > 2000 ? ‘bad’ : e.p99Ms > 1000 ? ‘mid’ : ‘ok’;
+const tputPct = ((e.throughputRps / maxTput) * 100).toFixed(1);
+return ` <tr> <td><code style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--accent)">${e.name}</code></td> <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.7rem">${e.p50Ms}ms</td> <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.7rem">${Math.round(e.p95Ms)}ms</td> <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:${e.p99Ms>1000?'var(--danger)':e.p99Ms>500?'var(--warn)':'var(--text)'}">${Math.round(e.p99Ms)}ms</td> <td> <div class="tput-bar"> <div class="tput-track"><div class="tput-fill" style="width:${tputPct}%"></div></div> <span style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:var(--muted);width:52px;text-align:right">${e.throughputRps} rps</span> </div> </td> <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.7rem" class="${errCls}">${e.errorPct}%</td> <td><span class="status-pill ${e.status === 'pass' ? 'pass' : e.status === 'warn' ? 'warn-pill' : 'fail'}">${e.status.toUpperCase()}</span></td> </tr>`;
+}).join(’’);
+
+return ` <div class="perf-summary-grid">${summaryCards}</div> <div class="branch-section-title section-gap">Endpoint Results</div> <div style="overflow-x:auto"> <table class="perf-endpoints-table"> <thead><tr> <th>Endpoint</th><th style="text-align:right">P50</th><th style="text-align:right">P95</th> <th style="text-align:right">P99</th><th>Throughput</th><th style="text-align:right">Error %</th><th>Status</th> </tr></thead> <tbody>${endpointRows}</tbody> </table> </div>`;
+}
+
+/* –––––––––––––––––––––––––––––
+6c. DEPLOYMENT PANE
+––––––––––––––––––––––––––––– */
+function deployPaneHtml(repo) {
+if (!repo.deployments.length) return ‘<div class="no-data">No deployment data available.</div>’;
+
+const grouped = groupByEnvType(repo.deployments);
+const envOrder = [‘dev’,‘sit’,‘uat’,‘prod’];
+
+const envBadgeCls = { dev:‘env-dev’, sit:‘env-sit’, uat:‘env-uat’, prod:‘env-prod’ };
+
+return envOrder.filter(e => grouped[e]).map(envType => {
+const instances = grouped[envType];
+const instCards = instances.map(inst => ` <div class="deploy-instance ${healthCls(inst.health)}"> <div class="inst-header"> <span class="inst-name">${inst.instanceName}</span> <span class="health-dot ${inst.health}" title="${inst.health}"></span> </div> <div class="inst-row"> <span class="key">GROUP</span> <span class="val">${inst.group}</span> </div> <div class="inst-row"> <span class="key">API ver</span> <span class="val ver">${inst.apiVersion}</span> </div> <div class="inst-row"> <span class="key">Web ver</span> <span class="val ver">${inst.webVersion}</span> </div> <div class="inst-row"> <span class="key">Health</span> <span class="val" style="color:${inst.health==='up'?'var(--success)':inst.health==='degraded'?'var(--warn)':'var(--danger)'}">${inst.health.toUpperCase()}</span> </div> <div class="inst-row" style="margin-top:4px"> <span class="key">TYK</span> <a class="tyk-link" href="${inst.tykUrl}" target="_blank" title="${inst.tykUrl}">↗ ${inst.instanceName}/api</a> </div> </div>`).join(’’);
+
+```
+return `
+  <div class="deploy-env-group">
+    <div class="env-group-title">
+      <span class="env-type-badge ${envBadgeCls[envType]}">${envType.toUpperCase()}</span>
+      ${envType.toUpperCase()} Environment · ${instances.length} instance${instances.length>1?'s':''}
+    </div>
+    <div class="deploy-instances-grid">${instCards}</div>
+  </div>`;
+```
+
+}).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+7. TOGGLE LOGIC
+––––––––––––––––––––––––––––– */
+
+/** Toggle the entire expand area open/closed */
+function toggleRow(repoId) {
+const area = document.getElementById(`expand-${repoId}`);
+const btn  = document.getElementById(`toggle-${repoId}`);
+const card = document.getElementById(`card-${repoId}`);
+const open = area.classList.contains(‘visible’);
+
+area.classList.toggle(‘visible’, !open);
+btn.classList.toggle(‘open’, !open);
+btn.textContent = open ? ‘▸’ : ‘▾’;
+card.classList.toggle(‘expanded’, !open);
+}
+
+/** Open expand area and switch to a specific pane */
+function togglePane(repoId, pane, triggerBtn, branchFilter) {
+const area = document.getElementById(`expand-${repoId}`);
+const btn  = document.getElementById(`toggle-${repoId}`);
+const card = document.getElementById(`card-${repoId}`);
+
+// If not open, open it
+if (!area.classList.contains(‘visible’)) {
+area.classList.add(‘visible’);
+btn.textContent = ‘▾’;
+btn.classList.add(‘open’);
+card.classList.add(‘expanded’);
+}
+
+// Activate the correct tab
+const tabs = document.querySelectorAll(`#tabs-${repoId} .expand-tab`);
+const panes = document.querySelectorAll(`#expand-${repoId} .expand-pane`);
+const targetPane = document.getElementById(`pane-${pane}-${repoId}`);
+
+tabs.forEach(t  => t.classList.remove(‘active’));
+panes.forEach(p => p.classList.remove(‘active’));
+
+// Match tab by pane name
+tabs.forEach(t => {
+if ((pane === ‘branches’ && t.textContent.includes(‘Branch’)) ||
+(pane === ‘perf’     && t.textContent.includes(‘Perf’))   ||
+(pane === ‘deploys’  && t.textContent.includes(‘Deploy’))) {
+t.classList.add(‘active’);
+}
+});
+
+if (targetPane) targetPane.classList.add(‘active’);
+
+// Highlight the triggering button as active
+[‘pb-btn’,‘fb-btn’,‘perf-btn’,‘dep-btn’].forEach(prefix => {
+const el = document.getElementById(`${prefix}-${repoId}`);
+if (el) el.classList.remove(‘active’);
+});
+if (triggerBtn) triggerBtn.classList.add(‘active’);
+}
+
+/** Switch tabs from within the expand area */
+function switchTab(repoId, pane, tabEl) {
+const tabs  = document.querySelectorAll(`#tabs-${repoId} .expand-tab`);
+const panes = document.querySelectorAll(`#expand-${repoId} .expand-pane`);
+tabs.forEach(t  => t.classList.remove(‘active’));
+panes.forEach(p => p.classList.remove(‘active’));
+tabEl.classList.add(‘active’);
+const target = document.getElementById(`pane-${pane}-${repoId}`);
+if (target) target.classList.add(‘active’);
+}
+
+/* –––––––––––––––––––––––––––––
+8. FILTERS & SEARCH
+––––––––––––––––––––––––––––– */
+function applyFilters() {
+const type = document.getElementById(‘typeFilter’).value;
+const group = document.getElementById(‘groupFilter’).value;
+
+filtered = allRepos.filter(r => {
+if (type  && r.type  !== type)  return false;
+if (group && r.group !== group) return false;
+if (searchQuery) {
+const q = searchQuery.toLowerCase();
+return r.name.toLowerCase().includes(q) || r.group.toLowerCase().includes(q);
+}
+return true;
+});
+
+renderSummary(filtered);
+renderRepoList(filtered);
+}
+
+function onSearch(val) {
+searchQuery = val;
+applyFilters();
+}
+
+function populateFilters(repos) {
+const groups = […new Set(repos.map(r => r.group))].sort();
+const gSel   = document.getElementById(‘groupFilter’);
+const curG   = gSel.value;
+gSel.innerHTML = `<option value="">All groups</option>` +
+groups.map(g => `<option value="${g}"${g===curG?' selected':''}>${g}</option>`).join(’’);
+}
+
+/* –––––––––––––––––––––––––––––
+9. DATA LOADING
+––––––––––––––––––––––––––––– */
+async function loadData() {
+const btn = document.getElementById(‘refreshBtn’);
+btn.classList.add(‘spinning’);
+try {
+await new Promise(r => setTimeout(r, 600));
+const json = mockApiResponse(); // ← replace with real fetch()
+
+```
+allRepos = json.repos;
+populateFilters(allRepos);
+renderSummary(allRepos);
+
+// Set period info
+const d = new Date(json.meta.fetchedAt);
+document.getElementById('lastUpdated').textContent =
+  'Updated ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+applyFilters();
+```
+
+} catch(err) {
+document.getElementById(‘repoList’).innerHTML = ` <div class="state-overlay"> <div style="font-size:2rem">⚠</div> <div style="color:var(--danger)">Failed to load repository data</div> <div style="color:var(--muted);font-size:0.65rem">${err.message}</div> <button class="retry-btn" onclick="loadData()">↺ Retry</button> </div>`;
+} finally {
+btn.classList.remove(‘spinning’);
+}
+}
+
+/* –––––––––––––––––––––––––––––
+10. INIT
+––––––––––––––––––––––––––––– */
+document.addEventListener(‘DOMContentLoaded’, () => {
+document.getElementById(‘typeFilter’).addEventListener(‘change’,  applyFilters);
+document.getElementById(‘groupFilter’).addEventListener(‘change’, applyFilters);
+loadData();
+});
+</script>
+
+</body>
+</html>
