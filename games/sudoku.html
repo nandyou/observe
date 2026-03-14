@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>6×6 Sudoku</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+```
+:root {
+  --cream:    #f5f0e8;
+  --ink:      #1a1612;
+  --rust:     #c94f2a;
+  --gold:     #d4a847;
+  --sage:     #4a6741;
+  --warm-mid: #8b7355;
+  --cell-bg:  #faf7f2;
+  --border:   #c8bfaa;
+  --box-border: #1a1612;
+  --hint-bg:  #ede6d8;
+  --selected-bg: #fdefd1;
+  --conflict-bg: #fde0d0;
+  --same-bg:  #edf5ec;
+  --correct-bg: #e0f0de;
+  --error-bg: #fde0d0;
+}
+
+body {
+  font-family: 'DM Mono', monospace;
+  background-color: var(--cream);
+  color: var(--ink);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(201,79,42,0.06) 0%, transparent 50%),
+    radial-gradient(circle at 85% 80%, rgba(74,103,65,0.06) 0%, transparent 50%);
+}
+
+header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+header h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+header h1 span {
+  color: var(--rust);
+  font-style: italic;
+}
+
+header p {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warm-mid);
+  margin-top: 6px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 18px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  border-radius: 2px;
+}
+.btn:hover { background: var(--ink); color: var(--cream); }
+.btn:active { transform: scale(0.97); }
+.btn.primary { background: var(--ink); color: var(--cream); }
+.btn.primary:hover { background: var(--rust); border-color: var(--rust); }
+
+.difficulty-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.diff-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--warm-mid);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+.diff-btn.active {
+  border-color: var(--rust);
+  color: var(--rust);
+  background: rgba(201,79,42,0.06);
+}
+
+.board-wrap {
+  position: relative;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  border: 2.5px solid var(--box-border);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 4px 4px 0 var(--warm-mid);
+  width: min(360px, 88vw);
+  height: min(360px, 88vw);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+  cursor: pointer;
+  background: var(--cell-bg);
+  border: 1px solid var(--border);
+  transition: background 0.12s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Box borders: 3 cols × 2 rows boxes */
+/* Thick right border after col 2 (index 2) */
+.cell[data-col="2"] { border-right: 2px solid var(--box-border); }
+/* Thick bottom border after row 1 (index 1) and row 3 (index 3) */
+.cell[data-row="1"] { border-bottom: 2px solid var(--box-border); }
+.cell[data-row="3"] { border-bottom: 2px solid var(--box-border); }
+
+.cell.given {
+  background: var(--hint-bg);
+  cursor: default;
+  color: var(--ink);
+}
+.cell.selected { background: var(--selected-bg) !important; }
+.cell.same-val  { background: var(--same-bg); }
+.cell.conflict  { background: var(--conflict-bg); }
+.cell.correct   { background: var(--correct-bg); color: var(--sage); }
+.cell.error     { background: var(--error-bg);   color: var(--rust); }
+
+.cell .pencil-marks {
+  position: absolute;
+  inset: 1px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  pointer-events: none;
+}
+.cell .pencil-marks span {
+  font-family: 'DM Mono', monospace;
+  font-size: clamp(0.38rem, 1.1vw, 0.52rem);
+  color: var(--warm-mid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.numpad {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: center;
+}
+
+.num-btn {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.3rem;
+  width: clamp(38px, 9vw, 48px);
+  height: clamp(38px, 9vw, 48px);
+  border: 1.5px solid var(--border);
+  background: var(--cell-bg);
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.num-btn:hover { border-color: var(--rust); color: var(--rust); background: rgba(201,79,42,0.06); }
+.num-btn.erase { font-family: 'DM Mono', monospace; font-size: 0.9rem; }
+
+.mode-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: center;
+}
+.mode-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--warm-mid);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+.mode-btn.active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--cream);
+}
+
+.stats {
+  display: flex;
+  gap: 24px;
+  margin-top: 18px;
+  justify-content: center;
+}
+.stat {
+  text-align: center;
+}
+.stat-val {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+.stat-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warm-mid);
+}
+
+.message {
+  margin-top: 14px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--warm-mid);
+  text-align: center;
+  min-height: 18px;
+}
+.message.win {
+  color: var(--sage);
+  font-family: 'DM Serif Display', serif;
+  font-size: 1rem;
+  font-style: italic;
+}
+.message.error-msg { color: var(--rust); }
+
+/* Celebration animation */
+@keyframes pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.cell.celebrate { animation: pop 0.35s ease forwards; }
+```
+
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Su<span>do</span>ku</h1>
+  <p>6 × 6 Daily Puzzle</p>
+</header>
+
+<div class="difficulty-row">
+  <button class="diff-btn active" data-diff="easy">Easy</button>
+  <button class="diff-btn" data-diff="medium">Medium</button>
+  <button class="diff-btn" data-diff="hard">Hard</button>
+</div>
+
+<div class="toolbar">
+  <button class="btn primary" id="newGameBtn">New Game</button>
+  <button class="btn" id="checkBtn">Check</button>
+  <button class="btn" id="solveBtn">Solve</button>
+</div>
+
+<div class="board-wrap">
+  <div class="board" id="board"></div>
+</div>
+
+<div class="numpad" id="numpad"></div>
+
+<div class="mode-row">
+  <button class="mode-btn active" id="normalMode">Normal</button>
+  <button class="mode-btn" id="pencilMode">✏ Pencil</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-val" id="timerVal">0:00</div><div class="stat-label">Time</div></div>
+  <div class="stat"><div class="stat-val" id="mistakesVal">0</div><div class="stat-label">Mistakes</div></div>
+</div>
+
+<div class="message" id="message"></div>
+
+<script>
+// ─── Sudoku Logic ──────────────────────────────────────────────────────────
+const N = 6;
+// 3-col × 2-row boxes
+function boxOf(r,c){ return Math.floor(r/2)*2 + Math.floor(c/3); }
+
+function isValid(board,r,c,num){
+  for(let i=0;i<N;i++) if(board[r][i]===num||board[i][c]===num) return false;
+  const br=Math.floor(r/2)*2, bc=Math.floor(c/3)*3;
+  for(let dr=0;dr<2;dr++) for(let dc=0;dc<3;dc++)
+    if(board[br+dr][bc+dc]===num) return false;
+  return true;
+}
+
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.random()*i+1|0; [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+
+function solve(board){
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(board[r][c]===0){
+    const nums=shuffle([1,2,3,4,5,6]);
+    for(const n of nums){ if(isValid(board,r,c,n)){ board[r][c]=n; if(solve(board)) return true; board[r][c]=0; } }
+    return false;
+  }
+  return true;
+}
+
+function generatePuzzle(difficulty){
+  // Start with empty board, fill it
+  const solution=Array.from({length:N},()=>Array(N).fill(0));
+  solve(solution);
+
+  // Remove cells based on difficulty
+  const clues = difficulty==='easy' ? 24 : difficulty==='medium' ? 18 : 14;
+  const remove = N*N - clues;
+  const puzzle = solution.map(r=>[...r]);
+  const positions = shuffle(Array.from({length:N*N},(_,i)=>i));
+  let removed=0;
+  for(const pos of positions){
+    if(removed>=remove) break;
+    const r=pos/N|0, c=pos%N;
+    const backup=puzzle[r][c];
+    puzzle[r][c]=0;
+    // Check unique solution (simplified: just count solutions up to 2)
+    const copy=puzzle.map(row=>[...row]);
+    if(countSolutions(copy)===1){ removed++; }
+    else { puzzle[r][c]=backup; }
+  }
+  return {puzzle,solution};
+}
+
+function countSolutions(board,count={v:0}){
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(board[r][c]===0){
+    for(let n=1;n<=6;n++){
+      if(isValid(board,r,c,n)){
+        board[r][c]=n;
+        countSolutions(board,count);
+        board[r][c]=0;
+        if(count.v>1) return count.v;
+      }
+    }
+    return count.v;
+  }
+  count.v++;
+  return count.v;
+}
+
+// ─── Game State ───────────────────────────────────────────────────────────
+let puzzle, solution, userBoard, pencilMarks, given;
+let selected = null;
+let mistakes = 0;
+let pencilMode = false;
+let difficulty = 'easy';
+let timerInterval, timerSeconds = 0;
+let gameWon = false;
+
+function startGame(){
+  gameWon = false;
+  mistakes = 0;
+  timerSeconds = 0;
+  clearInterval(timerInterval);
+  document.getElementById('mistakesVal').textContent = '0';
+  document.getElementById('timerVal').textContent = '0:00';
+  document.getElementById('message').textContent = '';
+  document.getElementById('message').className = 'message';
+
+  ({puzzle, solution} = generatePuzzle(difficulty));
+  userBoard = puzzle.map(r=>[...r]);
+  pencilMarks = Array.from({length:N},()=>Array.from({length:N},()=>new Set()));
+  given = puzzle.map(r=>r.map(v=>v!==0));
+  selected = null;
+
+  renderBoard();
+  timerInterval = setInterval(()=>{
+    if(gameWon) return;
+    timerSeconds++;
+    const m=timerSeconds/60|0, s=timerSeconds%60;
+    document.getElementById('timerVal').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  },1000);
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────
+function renderBoard(){
+  const board = document.getElementById('board');
+  board.innerHTML='';
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    const cell=document.createElement('div');
+    cell.className='cell';
+    cell.dataset.row=r; cell.dataset.col=c;
+    if(given[r][c]) cell.classList.add('given');
+    updateCellDisplay(cell,r,c);
+    cell.addEventListener('click',()=>selectCell(r,c));
+    board.appendChild(cell);
+  }
+}
+
+function getCell(r,c){ return document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`); }
+
+function updateCellDisplay(cell,r,c){
+  cell.innerHTML='';
+  const val=userBoard[r][c];
+  if(val!==0){
+    cell.textContent=val;
+  } else if(pencilMarks[r][c].size>0){
+    const pm=document.createElement('div');
+    pm.className='pencil-marks';
+    for(let n=1;n<=6;n++){
+      const s=document.createElement('span');
+      s.textContent=pencilMarks[r][c].has(n)?n:'';
+      pm.appendChild(s);
+    }
+    cell.appendChild(pm);
+  }
+}
+
+function selectCell(r,c){
+  if(gameWon) return;
+  selected={r,c};
+  highlightCells();
+}
+
+function highlightCells(){
+  document.querySelectorAll('.cell').forEach(cell=>{
+    const r=+cell.dataset.row, c=+cell.dataset.col;
+    cell.classList.remove('selected','same-val','conflict','correct','error');
+    if(!selected) return;
+    const {r:sr,c:sc}=selected;
+    const selVal=userBoard[sr][sc];
+    if(r===sr&&c===sc){
+      cell.classList.add('selected');
+    } else if(r===sr||c===sc||boxOf(r,c)===boxOf(sr,sc)){
+      // highlight related
+      if(selVal!==0 && userBoard[r][c]===selVal && !given[r][c]){
+        cell.classList.add('conflict');
+      } else {
+        cell.classList.add('same-val');
+      }
+    } else if(selVal!==0&&userBoard[r][c]===selVal){
+      cell.classList.add('same-val');
+    }
+  });
+}
+
+function enterNumber(num){
+  if(!selected||gameWon) return;
+  const {r,c}=selected;
+  if(given[r][c]) return;
+  const cell=getCell(r,c);
+
+  if(pencilMode){
+    if(userBoard[r][c]!==0) return;
+    if(pencilMarks[r][c].has(num)) pencilMarks[r][c].delete(num);
+    else pencilMarks[r][c].add(num);
+    updateCellDisplay(cell,r,c);
+    return;
+  }
+
+  // Normal mode
+  pencilMarks[r][c].clear();
+  if(userBoard[r][c]===num){ userBoard[r][c]=0; }
+  else {
+    if(num!==solution[r][c]){
+      mistakes++;
+      document.getElementById('mistakesVal').textContent=mistakes;
+      userBoard[r][c]=num;
+      updateCellDisplay(cell,r,c);
+      cell.classList.add('error');
+      setTimeout(()=>{ cell.classList.remove('error'); highlightCells(); },700);
+      if(mistakes>=3){
+        document.getElementById('message').textContent='Too many mistakes — try again!';
+        document.getElementById('message').className='message error-msg';
+      }
+      return;
+    }
+    userBoard[r][c]=num;
+    // Remove pencil marks in related cells
+    for(let i=0;i<N;i++){
+      pencilMarks[r][i].delete(num);
+      updateCellDisplay(getCell(r,i),r,i);
+      pencilMarks[i][c].delete(num);
+      updateCellDisplay(getCell(i,c),i,c);
+    }
+    const br=Math.floor(r/2)*2, bc=Math.floor(c/3)*3;
+    for(let dr=0;dr<2;dr++) for(let dc=0;dc<3;dc++){
+      pencilMarks[br+dr][bc+dc].delete(num);
+      updateCellDisplay(getCell(br+dr,bc+dc),br+dr,bc+dc);
+    }
+  }
+  updateCellDisplay(cell,r,c);
+  highlightCells();
+  checkWin();
+}
+
+function eraseCell(){
+  if(!selected||gameWon) return;
+  const {r,c}=selected;
+  if(given[r][c]) return;
+  userBoard[r][c]=0;
+  pencilMarks[r][c].clear();
+  updateCellDisplay(getCell(r,c),r,c);
+  highlightCells();
+}
+
+function checkWin(){
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++)
+    if(userBoard[r][c]!==solution[r][c]) return;
+  gameWon=true;
+  clearInterval(timerInterval);
+  // celebrate
+  setTimeout(()=>{
+    document.querySelectorAll('.cell').forEach((cell,i)=>{
+      setTimeout(()=>cell.classList.add('celebrate'),i*15);
+    });
+    document.getElementById('message').textContent='Brilliant! Puzzle solved ✦';
+    document.getElementById('message').className='message win';
+  },100);
+}
+
+function checkBoard(){
+  let hasErrors=false;
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    if(userBoard[r][c]!==0&&userBoard[r][c]!==solution[r][c]){
+      const cell=getCell(r,c);
+      cell.classList.add('error');
+      setTimeout(()=>{cell.classList.remove('error');highlightCells();},1200);
+      hasErrors=true;
+    }
+  }
+  if(!hasErrors){
+    const msg=document.getElementById('message');
+    msg.textContent='Looking good — no errors found!';
+    msg.className='message';
+    setTimeout(()=>{ if(!gameWon) msg.textContent=''; },2000);
+  }
+}
+
+function solveBoard(){
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+    userBoard[r][c]=solution[r][c];
+    pencilMarks[r][c].clear();
+    updateCellDisplay(getCell(r,c),r,c);
+  }
+  highlightCells();
+  checkWin();
+}
+
+// ─── UI Setup ─────────────────────────────────────────────────────────────
+// Numpad
+const numpad=document.getElementById('numpad');
+for(let n=1;n<=6;n++){
+  const btn=document.createElement('button');
+  btn.className='num-btn'; btn.textContent=n;
+  btn.addEventListener('click',()=>enterNumber(n));
+  numpad.appendChild(btn);
+}
+const eraseBtn=document.createElement('button');
+eraseBtn.className='num-btn erase'; eraseBtn.textContent='⌫';
+eraseBtn.addEventListener('click',eraseCell);
+numpad.appendChild(eraseBtn);
+
+// Keyboard
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='6') enterNumber(+e.key);
+  else if(e.key==='Backspace'||e.key==='Delete'||e.key==='0') eraseCell();
+  else if(e.key==='p'||e.key==='P'){ pencilMode=!pencilMode; updateModeUI(); }
+  else if(selected){
+    const {r,c}=selected;
+    if(e.key==='ArrowUp'&&r>0) selectCell(r-1,c);
+    else if(e.key==='ArrowDown'&&r<N-1) selectCell(r+1,c);
+    else if(e.key==='ArrowLeft'&&c>0) selectCell(r,c-1);
+    else if(e.key==='ArrowRight'&&c<N-1) selectCell(r,c+1);
+  }
+});
+
+// Toolbar buttons
+document.getElementById('newGameBtn').addEventListener('click',startGame);
+document.getElementById('checkBtn').addEventListener('click',checkBoard);
+document.getElementById('solveBtn').addEventListener('click',solveBoard);
+
+// Difficulty
+document.querySelectorAll('.diff-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    difficulty=btn.dataset.diff;
+    startGame();
+  });
+});
+
+// Mode
+function updateModeUI(){
+  document.getElementById('normalMode').classList.toggle('active',!pencilMode);
+  document.getElementById('pencilMode').classList.toggle('active',pencilMode);
+}
+document.getElementById('normalMode').addEventListener('click',()=>{ pencilMode=false; updateModeUI(); });
+document.getElementById('pencilMode').addEventListener('click',()=>{ pencilMode=true; updateModeUI(); });
+
+// Start
+startGame();
+</script>
+
+</body>
+</html>
